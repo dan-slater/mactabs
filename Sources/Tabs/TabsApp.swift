@@ -164,7 +164,7 @@ struct ContentView: View {
                             if let tv = sv?.documentView as? NSTextView, let lm = tv.layoutManager {
                                 lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { _, _, _, _, _ in frags += 1 }
                             }
-                            let srcLines = (player.tab?.body ?? "").components(separatedBy: "\n").count
+                            let srcLines = ((sv?.documentView as? NSTextView)?.string ?? "").components(separatedBy: "\n").count - 1
                             let s = "{\"running\":\(player.running),\"speed\":\(player.speed),\"y\":\(y),\"fragments\":\(frags),\"lines\":\(srcLines),\"fontSize\":\(player.fontSize),\"tab\":\"\(player.tab?.title ?? "")\",\"chords\":\(player.showChords),\"fileScroll\":\(player.tab?.scroll ?? -1),\"window\":\(NSApp.windows.first?.windowNumber ?? -1)}\n"
                             if let out = FileHandle(forWritingAtPath: path + ".out") { out.seekToEndOfFile(); out.write(s.data(using: .utf8)!) }
                             else { try? s.write(toFile: path + ".out", atomically: true, encoding: .utf8) }
