@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "fretboard",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/itsmeichigo/Fretboard.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "0803c3432702c3ffbd925fd3d0a56024d9bffe22"
+      }
+    }
+  ],
+  "version" : 2
+}
