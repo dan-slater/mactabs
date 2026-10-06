@@ -67,6 +67,21 @@ microphone and speech permissions). Words that act: **faster**, **slower**, **st
 (pause, wait), **go** (start, play, scroll), **top** (restart). Recognition sessions are
 capped at about a minute, so the app rolls them over every 50 s while listening.
 
+## Getting tabs in: the `/tab` skill
+
+The importer lives in `dan-slater/daniel-dev-skills` as the `tab` skill (symlinked at
+`~/.claude/skills/tab`). One stdlib Python script writes `~/Tabs/<Artist> - <Title>.tab`:
+
+```bash
+T=~/.claude/skills/tab/scripts/tab-import.py
+python3 -I $T ug  'https://tabs.ultimate-guitar.com/tab/...'   # a UG page (its js-store JSON)
+python3 -I $T ug  'Radiohead - Creep' [--chords]                # UG search, most-voted version
+python3 -I $T pdf song.pdf                                      # pdftotext -layout
+python3 -I $T scan song.pdf|png                                 # tesseract, columns rebuilt from word boxes
+```
+
+Or just tell Claude `/tab <url>`. The file appears in the sidebar as soon as it is written.
+
 ## Testing
 
 `tests/ui.sh` launches the built bundle against a throwaway library and drives it two ways:

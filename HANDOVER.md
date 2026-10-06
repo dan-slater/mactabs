@@ -1,5 +1,29 @@
 # tabs-app — handover log
 
+> ## 🎸 BACKED UP + /tab SKILL BUILT (2026-10-06, evening) — READ THIS FIRST
+>
+> **Done this session:** private repo `dan-slater/tabs-app` created and `master` pushed (the
+> earlier block below predates the remote). The `/tab` skill is built and live:
+> `~/dan-hub/daniel-dev-skills/tab` (commit `1d48bd5`, pushed), symlinked at
+> `~/.claude/skills/tab`. One stdlib script, `scripts/tab-import.py`, three legs: `ug <url |
+> "artist - title"> [--chords]` (UG `js-store` JSON blob, browser UA; search takes the most-voted
+> version of the asked type), `pdf <file>` (`pdftotext -layout`), `scan <file>` (`pdftoppm` +
+> `tesseract --psm 4 tsv`, columns rebuilt from word boxes because plain tesseract trims leading
+> spaces). Section headers are normalised to `[Section]`; `[tab]`/`[ch]` markup stripped.
+>
+> **Proven:** Wish You Were Here (URL), Creep (search, chords), Stairway (search, tabs) imported
+> clean; Creep opened in the real app with chords detected and the panel showing G B C Cm
+> (real `screencapture -l` shot). PDF leg faithful to ±2 chars on a PDF synthesised from the
+> Creep text; scan leg keeps placement but drops isolated single-letter chords (OCR limit).
+> `~/Tabs` now holds the sample + Creep + "Wish You Were Here (UG 104578)".
+>
+> **Still wanted from Daniel:** a real-world tab PDF and a phone-photo scan to harden the
+> `pdf`/`scan` heuristics; the live mic→speech hand test with a guitar.
+>
+> **Harness trick learned:** to select a sidebar row from a script use System Events
+> `set selected of row N of outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1
+> of window 1 to true` — clicking the row's static text does nothing.
+
 > ## 🎸 TABS VIEWER v0.1 SHIPPED, /tab SKILL NOT STARTED (2026-10-06) — READ THIS FIRST
 >
 > **Goal:** a very simple native Mac app for scrolling through guitar tabs, with a native
