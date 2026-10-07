@@ -59,8 +59,12 @@ struct ScrollText: NSViewRepresentable {
     }
 
     /// The largest size ≤ `requested` (and ≥ 10) at which the longest line fits in `width`.
-    static let ink   = NSColor(white: 0.96, alpha: 1)
-    static let stave = NSColor(white: 0.96, alpha: 0.85)
+    // Dynamic colours that resolve at DRAW time, so the view follows the system appearance.
+    // Never derive one with withAlphaComponent(): that freezes it under the current appearance.
+    static let ink = NSColor.labelColor
+    static let stave = NSColor(name: nil) { app in
+        app.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.96, alpha: 0.85) : NSColor(white: 0.12, alpha: 0.9)
+    }
 
     static func fit(_ requested: CGFloat, text: String, width: CGFloat) -> CGFloat {
         guard width > 50 else { return requested }
@@ -74,9 +78,6 @@ struct ScrollText: NSViewRepresentable {
     static func style(_ text: String, size: CGFloat) -> NSAttributedString {
         let mono = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let out = NSMutableAttributedString()
-        // Fixed colours, not NSColor.textColor: the app is always dark, but a dynamic colour
-        // (and anything derived from it via withAlphaComponent) resolves against the SYSTEM
-        // appearance at attribute time, so on a Light-mode Mac the stave came out near-black.
         let para = NSMutableParagraphStyle()
         para.lineSpacing = size * 0.25
         for line in text.components(separatedBy: "\n") {

@@ -11,7 +11,6 @@ struct TabsApp: App {
         WindowGroup("Tabs") {
             ContentView(library: library, player: player)
                 .frame(minWidth: 800, minHeight: 500)
-                .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1200, height: 800)
         .commands { CommandGroup(replacing: .newItem) {} }
