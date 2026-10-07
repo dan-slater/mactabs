@@ -20,6 +20,16 @@
 > **Still wanted from Daniel:** a real-world tab PDF and a phone-photo scan to harden the
 > `pdf`/`scan` heuristics; the live mic→speech hand test with a guitar.
 >
+> **2026-10-07 morning:** app icon (`res/Tabs-icon.svg` → `res/Tabs.icns`, wired by
+> `CFBundleIconFile`; regenerate with rsvg-convert + iconutil, the SVG is the source).
+> **Song versions:** same artist+title = one sidebar row (`Song.group`), count badge, toolbar
+> segmented picker, right-click menu, `n` cycles; the chosen version is remembered per song;
+> `version:` frontmatter key (no `#` — it starts a comment). Library reload is debounced
+> 0.25 s + re-read at 1 s, because a create event lands before the writer finishes the file.
+> Harness: every keystroke now goes through `key` (re-asserts frontmost — other windows
+> activating mid-run were eating keys); 26/26. The A Team imported (capo now read from
+> `tab_view.meta`, not `tab`).
+>
 > **Harness trick learned:** to select a sidebar row from a script use System Events
 > `set selected of row N of outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1
 > of window 1 to true` — clicking the row's static text does nothing.

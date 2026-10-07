@@ -27,6 +27,9 @@ shot() { # real screenshot of the window (needs Screen Recording for the termina
 }
 state(){ : > "$OUT"; say state; sleep 0.3; cat "$OUT"; }
 field(){ python3 -c "import json,sys; print(json.loads(sys.stdin.readline())['$1'])"; }
+key(){ # every keystroke re-asserts focus: anything activating another window mid-run would otherwise eat it
+  osascript -e 'tell application "System Events" to tell process "Tabs" to set frontmost to true' -e "tell application \"System Events\" to $1" 2>"$WORK/osa.err"
+}
 check(){ # check <label> <python expr over s=state dict>
   local s; s=$(state)
   if python3 -c "import json,sys; s=json.loads(sys.stdin.readline()); sys.exit(0 if ($2) else 1)" <<<"$s"; then ok "$1"; else bad "$1  ← $s"; fi
@@ -68,25 +71,24 @@ say top; sleep 0.6
 check "'top' returns to the start"    "s['y']<1"
 
 echo "== keyboard (System Events)"
-if osascript -e 'tell application "System Events" to tell process "Tabs" to set frontmost to true' \
-             -e 'tell application "System Events" to key code 49' 2>"$WORK/osa.err"; then
+if key 'key code 49'; then
   sleep 0.5
   check "space toggles scrolling"     "s['running']==True"
   v0=$(state | field speed)
-  osascript -e 'tell application "System Events" to key code 126' -e 'tell application "System Events" to key code 126'; sleep 0.3
+  key 'key code 126'; key 'key code 126'; sleep 0.3
   check "↑ ↑ speeds up by 1.15^2"     "abs(s['speed']/$v0-1.15**2)<1e-3"
-  osascript -e 'tell application "System Events" to keystroke "c"'; sleep 0.4
+  key 'keystroke "c"'; sleep 0.4
   check "c hides chord panel"         "s['chords']==False"
   shot 03-no-chords
-  osascript -e 'tell application "System Events" to keystroke "c"'; sleep 0.3
-  osascript -e 'tell application "System Events" to key code 49'; sleep 0.3
+  key 'keystroke "c"'; sleep 0.3
+  key 'key code 49'; sleep 0.3
   check "space pauses again"          "s['running']==False"
-  osascript -e 'tell application "System Events" to keystroke "]"'; sleep 0.5
+  key 'keystroke "]"'; sleep 0.5
   check "] jumps to a later section"  "s['y']>30"
   shot 04-section
-  osascript -e 'tell application "System Events" to keystroke "t"'; sleep 0.5
+  key 'keystroke "t"'; sleep 0.5
   check "t returns to top"            "s['y']<1"
-  osascript -e 'tell application "System Events" to key code 125' -e 'tell application "System Events" to key code 125'; sleep 0.3
+  key 'key code 125'; key 'key code 125'; sleep 0.3
   check "↓ ↓ back to where it was"    "abs(s['speed']-$v0)<1e-3"
 else
   echo "  ! keystroke leg skipped — grant Accessibility to the terminal: $(cat "$WORK/osa.err")"
@@ -107,6 +109,30 @@ ls "$LIB" | grep -q "Third" && ok "file dropped into the folder" || bad "fixture
 sleep 0.5
 echo "  (sidebar refresh is visual — see 05-library.png)"
 shot 05-library
+
+echo "== versions (same artist + title = one row)"
+check "sample version label"          "s['version']=='sample'"
+cat > "$LIB/Pink Floyd - Wish You Were Here (UG tabs 104578).tab" <<'EOF'
+---
+title: Wish You Were Here
+artist: Pink Floyd
+version: UG tabs 104578
+scroll: 0.9
+---
+[Intro]
+e|--3--|
+EOF
+sleep 1.2
+check "open tab unchanged by a new version" "s['tab']=='Wish You Were Here' and s['version']=='sample'"
+if key 'keystroke "n"'; then
+  sleep 0.6
+  check "n cycles to the other version"     "s['version']=='UG tabs 104578' and abs(s['fileScroll']-0.9)<1e-6"
+  shot 06-versions
+  key 'keystroke "n"'; sleep 0.6
+  check "n wraps back to the first version" "s['version']=='sample'"
+fi
+rm "$LIB/Pink Floyd - Wish You Were Here (UG tabs 104578).tab"; sleep 1.2
+check "deleting a version keeps the song open" "s['tab']=='Wish You Were Here' and s['version']=='sample'"
 
 echo
 echo "passed $pass, failed $fail — shots in $SHOTS/"

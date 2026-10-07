@@ -12,6 +12,19 @@ struct TabFile: Identifiable, Hashable {
     var artist: String { meta["artist"] ?? "" }
     var scroll: Double { Double(meta["scroll"] ?? "") ?? 1.0 }
 
+    /// Files with the same artist + title are versions of one song. The label comes from a
+    /// `version:` key, else a trailing "(…)" in the file name, else the file name itself.
+    var songKey: String { (artist + "\u{1F}" + title).lowercased().trimmingCharacters(in: .whitespaces) }
+    var version: String {
+        if let v = meta["version"], !v.isEmpty { return v }
+        let name = url.deletingPathExtension().lastPathComponent
+        if name.hasSuffix(")"), let open = name.lastIndex(of: "(") {
+            let inner = name[name.index(after: open)..<name.index(before: name.endIndex)]
+            if !inner.isEmpty { return String(inner) }
+        }
+        return name
+    }
+
     /// Line indices of `[Section]` headers, for jumping.
     var sections: [Int] {
         body.components(separatedBy: "\n").enumerated().compactMap { i, line in
@@ -45,11 +58,37 @@ struct TabFile: Identifiable, Hashable {
     func saveScroll(_ value: Double) -> TabFile? {
         var meta = self.meta
         meta["scroll"] = String(format: "%.2f", value)
-        let order = ["title", "artist", "tuning", "capo", "bpm", "scroll", "source"]
+        let order = ["title", "artist", "version", "tuning", "capo", "bpm", "scroll", "source"]
         let keys = order.filter { meta[$0] != nil } + meta.keys.filter { !order.contains($0) }.sorted()
         let head = (["---"] + keys.map { "\($0): \(meta[$0]!)" } + ["---"]).joined(separator: "\n")
         guard (try? (head + "\n" + body).write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
         return TabFile.load(url)
+    }
+}
+
+/// One sidebar row: every version of a song, in file-name order.
+struct Song: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let artist: String
+    let versions: [TabFile]
+
+    static func group(_ tabs: [TabFile]) -> [Song] {
+        var order: [String] = []
+        var byKey: [String: [TabFile]] = [:]
+        for t in tabs {
+            if byKey[t.songKey] == nil { order.append(t.songKey) }
+            byKey[t.songKey, default: []].append(t)
+        }
+        return order.map { key in
+            // The plain "<Artist> - <Title>.tab" comes first; "(…)" variants follow in name order.
+            let vs = byKey[key]!.sorted {
+                let a = $0.url.lastPathComponent, b = $1.url.lastPathComponent
+                let ap = a.hasSuffix(").tab"), bp = b.hasSuffix(").tab")
+                return ap != bp ? !ap : a.localizedStandardCompare(b) == .orderedAscending
+            }
+            return Song(id: key, title: vs[0].title, artist: vs[0].artist, versions: vs)
+        }
     }
 }
 
@@ -63,6 +102,7 @@ final class Library: ObservableObject {
 
     @Published private(set) var tabs: [TabFile] = []
     private var source: DispatchSourceFileSystemObject?
+    private var pending: DispatchWorkItem?
 
     init() {
         try? FileManager.default.createDirectory(at: Self.dir, withIntermediateDirectories: true)
@@ -70,7 +110,17 @@ final class Library: ObservableObject {
         let fd = open(Self.dir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
-        src.setEventHandler { [weak self] in self?.reload() }
+        // A create event lands before the writer has finished the file, so an immediate read
+        // sees an empty or half-written tab. Settle briefly, then read again once more later.
+        src.setEventHandler { [weak self] in
+            self?.pending?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.reload()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self?.reload() }
+            }
+            self?.pending = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
         src.setCancelHandler { close(fd) }
         src.resume()
         source = src
@@ -78,9 +128,10 @@ final class Library: ObservableObject {
 
     func reload() {
         let urls = (try? FileManager.default.contentsOfDirectory(at: Self.dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-        tabs = urls
+        let fresh = urls
             .filter { ["tab", "txt"].contains($0.pathExtension.lowercased()) }
             .compactMap(TabFile.load)
             .sorted { ($0.artist + $0.title).localizedCaseInsensitiveCompare($1.artist + $1.title) == .orderedAscending }
+        if fresh != tabs { tabs = fresh }
     }
 }

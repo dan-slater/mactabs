@@ -47,6 +47,12 @@ So, so you think you can tell
   chord panel. Everything else is shown as is. Lines never wrap: the font shrinks to fit
   the longest line, down to 10 pt, and anything wider scrolls sideways.
 - Only `scroll` is written by the app; every other key is yours. No frontmatter is fine too.
+- **Versions.** Files with the same `artist` + `title` are one song: one sidebar row with a
+  count badge, a segmented picker in the toolbar, the versions in the row's right-click menu,
+  and `n` cycles them. The label is the `version:` key (`UG chords 4169`, `capo 2`, `live`),
+  else the `(…)` suffix of the file name. The plain `<Artist> - <Title>.tab` is always first;
+  the `/tab` skill names a second import `<Artist> - <Title> (<version>).tab` on its own.
+  Note: ` #` in a frontmatter value starts a comment, so write `UG tabs 104578`, not `#104578`.
 
 ## Keys
 
@@ -58,6 +64,7 @@ So, so you think you can tell
 | t / 0 | back to the top |
 | + − | bigger / smaller text (upper bound; lines still fit) |
 | c | show / hide the chord panel |
+| n | next version of this song (when there is more than one) |
 | v | voice commands on / off |
 
 ## Voice
@@ -74,7 +81,7 @@ The importer lives in `dan-slater/daniel-dev-skills` as the `tab` skill (symlink
 
 ```bash
 T=~/.claude/skills/tab/scripts/tab-import.py
-python3 -I $T ug  'https://tabs.ultimate-guitar.com/tab/...'   # a UG page (its js-store JSON)
+python3 -I $T ug  'https://tabs.ultimate-guitar.com/tab/...'   # a UG page (its js-store JSON); --version "label"
 python3 -I $T ug  'Radiohead - Creep' [--chords]                # UG search, most-voted version
 python3 -I $T pdf song.pdf                                      # pdftotext -layout
 python3 -I $T scan song.pdf|png                                 # tesseract, columns rebuilt from word boxes

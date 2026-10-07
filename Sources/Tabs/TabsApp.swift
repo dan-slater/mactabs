@@ -30,7 +30,8 @@ struct ContentView: View {
     @ObservedObject var library: Library
     @ObservedObject var player: Player
     @StateObject private var voice: Voice
-    @State private var selection: URL?
+    @State private var selection: String?          // Song.id
+    @State private var picked: [String: URL] = [:]  // which version of each song was last open
     @State private var query = ""
     @State private var monitor: Any?
 
@@ -40,19 +41,63 @@ struct ContentView: View {
         _voice = StateObject(wrappedValue: Voice(player: player))
     }
 
-    var filtered: [TabFile] {
+    var songs: [Song] { Song.group(library.tabs) }
+
+    var filtered: [Song] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty ? library.tabs : library.tabs.filter { ($0.artist + " " + $0.title).localizedCaseInsensitiveContains(q) }
+        return q.isEmpty ? songs : songs.filter { ($0.artist + " " + $0.title).localizedCaseInsensitiveContains(q) }
+    }
+
+    var currentSong: Song? { songs.first { $0.id == selection } }
+
+    /// Open one version of a song; remembered per song so re-selecting the row comes back to it.
+    func openVersion(_ tab: TabFile) {
+        picked[tab.songKey] = tab.url
+        if selection != tab.songKey { selection = tab.songKey }
+        player.open(tab)
+    }
+
+    func openSong(_ id: String?) {
+        guard let song = songs.first(where: { $0.id == id }) else { player.open(nil); return }
+        let tab = song.versions.first { $0.url == picked[song.id] } ?? song.versions[0]
+        player.open(tab)
+    }
+
+    func cycleVersion() {
+        guard let song = currentSong, song.versions.count > 1 else { return }
+        let i = song.versions.firstIndex { $0.url == player.tab?.url } ?? 0
+        let next = song.versions[(i + 1) % song.versions.count]
+        openVersion(next)
+        player.flash("version: \(next.version)")
     }
 
     var body: some View {
         NavigationSplitView {
-            List(filtered, selection: $selection) { tab in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tab.title).lineLimit(1)
-                    if !tab.artist.isEmpty { Text(tab.artist).font(.caption).foregroundStyle(.secondary) }
+            List(filtered, selection: $selection) { song in
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(song.title).lineLimit(1)
+                        if !song.artist.isEmpty { Text(song.artist).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer()
+                    if song.versions.count > 1 {
+                        Text("\(song.versions.count)")
+                            .font(.caption2.monospacedDigit())
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                            .help("\(song.versions.count) versions — right-click, or press n to cycle")
+                    }
                 }
-                .tag(tab.url)
+                .tag(song.id)
+                .contextMenu {
+                    ForEach(song.versions) { v in
+                        Button { openVersion(v) } label: {
+                            if v.url == player.tab?.url { Label(v.version, systemImage: "checkmark") } else { Text(v.version) }
+                        }
+                    }
+                    Divider()
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(song.versions.map(\.url)) }
+                }
             }
             .accessibilityIdentifier("tabList")
             .searchable(text: $query, placement: .sidebar, prompt: "Filter")
@@ -69,24 +114,41 @@ struct ContentView: View {
                 }
                 .overlay(alignment: .bottom) { hud(tab) }
                 .navigationTitle(tab.artist.isEmpty ? tab.title : "\(tab.artist) — \(tab.title)")
+                .toolbar {
+                    if let song = currentSong, song.versions.count > 1 {
+                        ToolbarItem(placement: .principal) {
+                            Picker("Version", selection: Binding(
+                                get: { player.tab?.url ?? song.versions[0].url },
+                                set: { url in if let v = song.versions.first(where: { $0.url == url }) { openVersion(v) } })) {
+                                ForEach(song.versions) { v in Text(v.version).tag(v.url) }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("versionPicker")
+                        }
+                    }
+                }
             } else {
                 ContentUnavailableView("No tab open", systemImage: "guitars",
-                    description: Text("Drop .tab files into \(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) and pick one.\n\nspace scroll · ↑↓ speed · [ ] sections · + − size · t top · c chords · v voice"))
+                    description: Text("Drop .tab files into \(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) and pick one.\n\nspace scroll · ↑↓ speed · [ ] sections · + − size · t top · c chords · n next version · v voice"))
             }
         }
-        .onChange(of: selection) { _, url in player.open(library.tabs.first { $0.url == url }) }
+        .onChange(of: selection) { _, id in
+            if player.tab?.songKey != id { openSong(id) }
+        }
         .onChange(of: library.tabs) { _, tabs in
             // The folder changed: pick up an edited body for the open tab without resetting playback.
             if let cur = player.tab, let fresh = tabs.first(where: { $0.url == cur.url }), fresh.modified != cur.modified {
                 let speed = player.speed
                 player.tab = fresh
                 player.speed = speed
+            } else if let cur = player.tab, !tabs.contains(where: { $0.url == cur.url }) {
+                openSong(selection)   // the open version was renamed or deleted: fall back within the song
             }
-            if selection == nil, let first = tabs.first { selection = first.url }
+            if selection == nil, let first = Song.group(tabs).first { selection = first.id }
         }
         .onAppear {
             installKeys()
-            if selection == nil, let first = library.tabs.first { selection = first.url }
+            if selection == nil, let first = songs.first { selection = first.id }
             installTestHook()
         }
     }
@@ -102,7 +164,7 @@ struct ContentView: View {
             }
             if !player.status.isEmpty { Text(player.status).foregroundStyle(.orange).accessibilityIdentifier("hudStatus") }
             Spacer()
-            Text("space ↑↓ [ ] +− t c v").foregroundStyle(.tertiary)
+            Text((currentSong?.versions.count ?? 1) > 1 ? "space ↑↓ [ ] +− t c n v" : "space ↑↓ [ ] +− t c v").foregroundStyle(.tertiary)
         }
         .font(.system(.callout, design: .monospaced))
         .padding(.horizontal, 14).padding(.vertical, 8)
@@ -130,6 +192,7 @@ struct ContentView: View {
                 case "[": player.nextSection(currentLine(), forward: false)
                 case "t", "0": player.top()
                 case "c": player.showChords.toggle()
+                case "n": cycleVersion()
                 case "v": voice.toggle()
                 default: return event
                 }
@@ -165,7 +228,7 @@ struct ContentView: View {
                                 lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { _, _, _, _, _ in frags += 1 }
                             }
                             let srcLines = ((sv?.documentView as? NSTextView)?.string ?? "").components(separatedBy: "\n").count - 1
-                            let s = "{\"running\":\(player.running),\"speed\":\(player.speed),\"y\":\(y),\"fragments\":\(frags),\"lines\":\(srcLines),\"fontSize\":\(player.fontSize),\"tab\":\"\(player.tab?.title ?? "")\",\"chords\":\(player.showChords),\"fileScroll\":\(player.tab?.scroll ?? -1),\"window\":\(NSApp.windows.first?.windowNumber ?? -1)}\n"
+                            let s = "{\"running\":\(player.running),\"speed\":\(player.speed),\"y\":\(y),\"fragments\":\(frags),\"lines\":\(srcLines),\"fontSize\":\(player.fontSize),\"tab\":\"\(player.tab?.title ?? "")\",\"version\":\"\(player.tab?.version ?? "")\",\"chords\":\(player.showChords),\"fileScroll\":\(player.tab?.scroll ?? -1),\"window\":\(NSApp.windows.first?.windowNumber ?? -1)}\n"
                             if let out = FileHandle(forWritingAtPath: path + ".out") { out.seekToEndOfFile(); out.write(s.data(using: .utf8)!) }
                             else { try? s.write(toFile: path + ".out", atomically: true, encoding: .utf8) }
                         } else if w.hasPrefix("shot ") {
