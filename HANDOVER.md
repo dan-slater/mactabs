@@ -30,6 +30,12 @@
 > activating mid-run were eating keys); 26/26. The A Team imported (capo now read from
 > `tab_view.meta`, not `tab`).
 >
+> **Light-mode trap (fixed):** Daniel's Mac is in system Light mode; `NSColor.textColor
+> .withAlphaComponent()` resolves against the SYSTEM appearance, so the stave lines drew
+> near-black on the dark app. `ScrollText` now uses fixed `ink`/`stave` colours. Never derive
+> from a dynamic NSColor in this app. (Same root cause as the in-app `shot` fallback dropping
+> dark-mode text.)
+>
 > **Harness trick learned:** to select a sidebar row from a script use System Events
 > `set selected of row N of outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1
 > of window 1 to true` — clicking the row's static text does nothing.
