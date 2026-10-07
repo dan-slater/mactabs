@@ -59,6 +59,9 @@ struct ScrollText: NSViewRepresentable {
     }
 
     /// The largest size ≤ `requested` (and ≥ 10) at which the longest line fits in `width`.
+    static let ink   = NSColor(white: 0.96, alpha: 1)
+    static let stave = NSColor(white: 0.96, alpha: 0.85)
+
     static func fit(_ requested: CGFloat, text: String, width: CGFloat) -> CGFloat {
         guard width > 50 else { return requested }
         let longest = text.components(separatedBy: "\n").map(\.count).max() ?? 0
@@ -71,12 +74,15 @@ struct ScrollText: NSViewRepresentable {
     static func style(_ text: String, size: CGFloat) -> NSAttributedString {
         let mono = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let out = NSMutableAttributedString()
+        // Fixed colours, not NSColor.textColor: the app is always dark, but a dynamic colour
+        // (and anything derived from it via withAlphaComponent) resolves against the SYSTEM
+        // appearance at attribute time, so on a Light-mode Mac the stave came out near-black.
         let para = NSMutableParagraphStyle()
         para.lineSpacing = size * 0.25
         for line in text.components(separatedBy: "\n") {
             let t = line.trimmingCharacters(in: .whitespaces)
             var attrs: [NSAttributedString.Key: Any] = [.font: mono, .paragraphStyle: para,
-                                                        .foregroundColor: NSColor.textColor]
+                                                        .foregroundColor: Self.ink]
             if t.hasPrefix("[") && t.hasSuffix("]") {
                 attrs[.font] = NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
                 attrs[.foregroundColor] = NSColor.systemOrange
@@ -84,7 +90,7 @@ struct ScrollText: NSViewRepresentable {
                 attrs[.foregroundColor] = NSColor.systemTeal
                 attrs[.font] = NSFont.monospacedSystemFont(ofSize: size, weight: .semibold)
             } else if line.contains("|") && line.contains("-") {
-                attrs[.foregroundColor] = NSColor.textColor.withAlphaComponent(0.85)
+                attrs[.foregroundColor] = Self.stave
             }
             out.append(NSAttributedString(string: line + "\n", attributes: attrs))
         }
