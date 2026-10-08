@@ -1,3 +1,26 @@
+> ## 🚀 v0.2.0 PUBLIC ON GITHUB (2026-10-08, evening) — READ THIS FIRST
+>
+> **Done:** repo `dan-slater/tabs-app` is **PUBLIC**, MIT, description + topics set, CI
+> (`.github/workflows/build.yml`, macos-15 `swift build` + `make`, green), release
+> **v0.2.0** with `Tabs.app.zip` (ad-hoc signed, not notarised → right-click Open).
+> README rewritten for a portfolio reader with `docs/screenshot-{light,dark}.png`.
+> Sample fixture is now **House of the Rising Sun (traditional, public domain)** — the Pink
+> Floyd lyrics could not ship in a public repo; `tests/fixtures/second.tab` artist is `Zed`
+> so the sample still sorts first. The importer's canonical copy is `tools/tab-import.py`
+> **in this repo**; `daniel-dev-skills/tab/scripts/tab-import.py` is now a symlink to it
+> (`38c6cc9`). `CFBundleShortVersionString` 0.2.0; Fretboard pinned to revision `0803c34`.
+>
+> **Testing is now two-speed** (Daniel: "testing gets in the way of me using my Mac"):
+> `make test` = FIFO leg only, 19 checks, no keystrokes, no focus steal — keep working;
+> `make test-full` (`FULL=1 tests/ui.sh`) adds the System Events keystroke leg, 26 checks,
+> steals focus. New FIFO words `next` (cycle version) and `chords` (toggle panel).
+>
+> **Next:** get stars/users — launch copy (Show HN, r/Guitar, r/macapps) is in the session
+> reply of 2026-10-08; Daniel posts, agents never post. Nice-to-haves that help adoption:
+> Homebrew cask (needs a stable download URL — the release asset is one), a GIF of the scroll
+> + voice in the README, notarisation (needs a paid Apple Developer account, R1 700/yr-ish).
+> Open from before: real-world PDF + phone scan to pilot `pdf`/`scan`; the live mic test.
+
 # tabs-app — handover log
 
 > ## 🎸 v0.2: ICON + VERSIONS + SYSTEM APPEARANCE (2026-10-07/08) — READ THIS FIRST

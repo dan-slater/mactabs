@@ -1,5 +1,7 @@
 # Tabs — an autoscrolling guitar-tab viewer for the Mac
 
+[![build](https://github.com/dan-slater/tabs-app/actions/workflows/build.yml/badge.svg)](https://github.com/dan-slater/tabs-app/actions/workflows/build.yml) · [Download](../../releases/latest) · MIT
+
 Put your hands on the guitar, hit space, and the tab scrolls at a speed you set once per song.
 Say "faster" or "slower" to adjust it without letting go of the neck. Chord diagrams for every
 chord in the song sit beside the text.
