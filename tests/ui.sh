@@ -3,7 +3,9 @@
 # TABS_TEST_FIFO hook (the same code path the voice commands use) and through real
 # keystrokes (System Events), reads state back as JSON and screenshots the window.
 #
-#   tests/ui.sh            run everything
+#   tests/ui.sh            the FIFO leg: no keystrokes, does not need focus (make test)
+#   FULL=1 tests/ui.sh     also the keystroke leg (make test-full) — it steals focus, so
+#                          leave the Mac alone while it runs
 #   KEEP=1 tests/ui.sh     leave the app open at the end
 #
 # Needs: build/Tabs.app (make), python3 for JSON, and — for the keystroke leg only —
@@ -14,8 +16,8 @@ APP=build/Tabs.app/Contents/MacOS/Tabs
 WORK=$(mktemp -d /tmp/tabs-ui.XXXXXX)
 LIB=$WORK/Tabs; FIFO=$WORK/cmd; OUT=$FIFO.out; SHOTS=${SHOTS:-tests/shots}
 mkdir -p "$LIB" "$SHOTS"; mkfifo "$FIFO"
-cp "tests/fixtures/sample.tab" "$LIB/Pink Floyd - Wish You Were Here.tab"
-cp "tests/fixtures/second.tab" "$LIB/Second - Tab.tab"
+cp "tests/fixtures/sample.tab" "$LIB/Traditional - House of the Rising Sun.tab"
+cp "tests/fixtures/second.tab" "$LIB/Zed - Tab.tab"
 pass=0; fail=0
 ok()   { echo "  ✓ $1"; pass=$((pass+1)); }
 bad()  { echo "  ✗ $1"; fail=$((fail+1)); }
@@ -44,7 +46,7 @@ sleep 2.5
 kill -0 $PID 2>/dev/null || { echo "app died:"; cat "$WORK/app.log"; exit 1; }
 
 echo "== load"
-check "first tab opened"              "s['tab']=='Wish You Were Here'"
+check "first tab opened"              "s['tab']=='House of the Rising Sun'"
 check "speed read from frontmatter"   "abs(s['speed']-0.6)<1e-6"
 check "not running at start"          "s['running']==False and s['y']<1"
 check "no tab line wraps"             "s['fragments']==s['lines']"
@@ -65,13 +67,14 @@ y2=$(state | field y); sleep 1
 check "paused really holds position"  "abs(s['y']-$y2)<1"
 say slower; sleep 1.8   # > the 1.5s debounce → speed persisted to the file
 check "'slower' then persists to file" "abs(s['fileScroll']-s['speed'])<1e-2 and abs(s['speed']-0.6*1.15**2)<1e-3"
-grep -q "^scroll: 0.79" "$LIB/Pink Floyd - Wish You Were Here.tab" && ok "frontmatter rewritten (scroll: 0.79)" || { bad "frontmatter not rewritten"; head -9 "$LIB/Pink Floyd - Wish You Were Here.tab"; }
-grep -q "^\[Outro\]" "$LIB/Pink Floyd - Wish You Were Here.tab" && ok "body intact after rewrite" || bad "body lost on rewrite"
+grep -q "^scroll: 0.79" "$LIB/Traditional - House of the Rising Sun.tab" && ok "frontmatter rewritten (scroll: 0.79)" || { bad "frontmatter not rewritten"; head -9 "$LIB/Traditional - House of the Rising Sun.tab"; }
+grep -q "^\[Outro\]" "$LIB/Traditional - House of the Rising Sun.tab" && ok "body intact after rewrite" || bad "body lost on rewrite"
 say top; sleep 0.6
 check "'top' returns to the start"    "s['y']<1"
 
 echo "== keyboard (System Events)"
-if key 'key code 49'; then
+if [ -z "${FULL:-}" ]; then echo "  - skipped (FULL=1 runs it)"
+elif key 'key code 49'; then
   sleep 0.5
   check "space toggles scrolling"     "s['running']==True"
   v0=$(state | field speed)
@@ -112,27 +115,25 @@ shot 05-library
 
 echo "== versions (same artist + title = one row)"
 check "sample version label"          "s['version']=='sample'"
-cat > "$LIB/Pink Floyd - Wish You Were Here (UG tabs 104578).tab" <<'EOF'
+cat > "$LIB/Traditional - House of the Rising Sun (UG tabs 1234).tab" <<'EOF'
 ---
-title: Wish You Were Here
-artist: Pink Floyd
-version: UG tabs 104578
+title: House of the Rising Sun
+artist: Traditional
+version: UG tabs 1234
 scroll: 0.9
 ---
 [Intro]
 e|--3--|
 EOF
 sleep 1.2
-check "open tab unchanged by a new version" "s['tab']=='Wish You Were Here' and s['version']=='sample'"
-if key 'keystroke "n"'; then
-  sleep 0.6
-  check "n cycles to the other version"     "s['version']=='UG tabs 104578' and abs(s['fileScroll']-0.9)<1e-6"
-  shot 06-versions
-  key 'keystroke "n"'; sleep 0.6
-  check "n wraps back to the first version" "s['version']=='sample'"
-fi
-rm "$LIB/Pink Floyd - Wish You Were Here (UG tabs 104578).tab"; sleep 1.2
-check "deleting a version keeps the song open" "s['tab']=='Wish You Were Here' and s['version']=='sample'"
+check "open tab unchanged by a new version" "s['tab']=='House of the Rising Sun' and s['version']=='sample'"
+say next; sleep 0.6
+check "next cycles to the other version"  "s['version']=='UG tabs 1234' and abs(s['fileScroll']-0.9)<1e-6"
+shot 06-versions
+say next; sleep 0.6
+check "next wraps back to the first version" "s['version']=='sample'"
+rm "$LIB/Traditional - House of the Rising Sun (UG tabs 1234).tab"; sleep 1.2
+check "deleting a version keeps the song open" "s['tab']=='House of the Rising Sun' and s['version']=='sample'"
 
 echo
 echo "passed $pass, failed $fail — shots in $SHOTS/"

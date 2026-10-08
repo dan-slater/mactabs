@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         // Chord diagrams + the tombatossals chords-db (MIT).
-        .package(url: "https://github.com/itsmeichigo/Fretboard.git", branch: "main"),
+        .package(url: "https://github.com/itsmeichigo/Fretboard.git", revision: "0803c3432702c3ffbd925fd3d0a56024d9bffe22"),
     ],
     targets: [
         .executableTarget(

@@ -1,7 +1,8 @@
 # tabs-app — autoscrolling tab viewer as a native Mac app.
 # make            build build/Tabs.app
 # make run        build and launch
-# make test       build + drive the app through the UI harness (tests/ui.sh)
+# make test       build + drive the app through the FIFO harness (tests/ui.sh; no focus steal)
+# make test-full  the same plus the real-keystroke leg (steals focus — leave the Mac alone)
 # make install    copy the bundle to ~/Applications
 APP    := Tabs
 BUILD  := build
@@ -28,6 +29,9 @@ run: all
 test: all
 	tests/ui.sh
 
+test-full: all
+	FULL=1 tests/ui.sh
+
 install: all
 	mkdir -p ~/Applications
 	rm -rf ~/Applications/$(APP).app
@@ -36,4 +40,4 @@ install: all
 clean:
 	rm -rf $(BUILD) .build
 
-.PHONY: all run test install clean
+.PHONY: all run test test-full install clean

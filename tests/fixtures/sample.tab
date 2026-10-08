@@ -1,72 +1,63 @@
 ---
-title: Wish You Were Here
-artist: Pink Floyd
+title: House of the Rising Sun
+artist: Traditional
 version: sample
 tuning: EADGBE
 capo: 0
-bpm: 60
+bpm: 80
 scroll: 0.6
-source: sample
+source: traditional folk song, public domain
 ---
 [Intro]
-    Em7            G
-e|--3-----3-----3-----3-----|--3-----3-----3-----3-----|
-B|----3-----3-----3-----3---|----3-----3-----3-----3---|
-G|------0-----0-----0-----0-|------0-----0-----0-----0-|
-D|--------------------------|--------------------------|
-A|--2-----------------------|--------------------------|
-E|--0-----------------------|--3-----------------------|
+    Am           C            D            F
+e|-----0-----|-----0-----|-----2-----|-----1-----|
+B|---1---1---|---1---1---|---3---3---|---1---1---|
+G|-2-------2-|-0-------0-|-2-------2-|-2-------2-|
+D|-----------|-----------|-0---------|-----------|
+A|-0---------|-3---------|-----------|-----------|
+E|-----------|-----------|-----------|-1---------|
 
-    Em7            G
-e|--3-----3-----3-----3-----|--3-----3-----3-----3-----|
-B|----3-----3-----3-----3---|----3-----3-----3-----3---|
-G|------0-----0-----0-----0-|------0-----0-----0-----0-|
-D|--------------------------|--------------------------|
-A|--2-----------------------|--------------------------|
-E|--0-----------------------|--3-----------------------|
-
-    Em7            A7sus4
-e|--3-----3-----3-----3-----|--3-----3-----3-----3-----|
-B|----3-----3-----3-----3---|----3-----3-----3-----3---|
-G|------0-----0-----0-----0-|------0-----0-----0-----0-|
-D|--------------------------|--------------------------|
-A|--2-----------------------|--0-----------------------|
-E|--0-----------------------|--------------------------|
+    Am           C            E            E
+e|-----0-----|-----0-----|-----0-----|-----0-----|
+B|---1---1---|---1---1---|---0---0---|---0---0---|
+G|-2-------2-|-0-------0-|-1-------1-|-1-------1-|
+D|-----------|-----------|-----------|-----------|
+A|-0---------|-3---------|-----------|-----------|
+E|-----------|-----------|-0---------|-0---------|
 
 [Verse 1]
-C                      D
-So, so you think you can tell
-Am                        G
-Heaven from hell, blue skies from pain
-D                                 C
-Can you tell a green field from a cold steel rail?
-Am                        G
-A smile from a veil? Do you think you can tell?
+Am       C        D         F
+There is a house in New Orleans
+Am       C        E
+They call the Rising Sun
+Am           C         D           F
+And it's been the ruin of many a poor boy
+Am      C      E
+And God, I know I'm one
 
 [Verse 2]
-C                              D
-Did they get you to trade your heroes for ghosts?
-Am                     G
-Hot ashes for trees? Hot air for a cool breeze?
-D                       C
-Cold comfort for change? Did you exchange
-Am                                  G
-A walk-on part in the war for a lead role in a cage?
+Am        C         D         F
+My mother was a tailor
+Am         C         E
+She sewed my new blue jeans
+Am        C         D       F
+My father was a gambling man
+Am      C        E
+Down in New Orleans
 
-[Solo]
-Em7  G  Em7  G  Em7  A7sus4  Em7  A7sus4  G
+[Instrumental]
+Am  C  D  F  Am  C  E  E
 
 [Verse 3]
-C                       D
-How I wish, how I wish you were here
-Am                                   G
-We're just two lost souls swimming in a fish bowl
-D         C
-Year after year
-Am                                      G
-Running over the same old ground, what have we found?
-D              C
-The same old fears, wish you were here
+Am       C         D        F
+Oh mother, tell your children
+Am       C       E
+Not to do what I have done
+Am       C          D          F
+Spend your lives in sin and misery
+Am      C        E
+In the house of the Rising Sun
 
 [Outro]
-Em7  G  Em7  G  Em7  A7sus4  Em7  A7sus4  G
+Am  C  D  F  Am  C  E  E
+Am  C  D  F  Am  E  Am

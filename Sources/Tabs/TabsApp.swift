@@ -201,7 +201,7 @@ struct ContentView: View {
     }
 
     /// Test hook: `TABS_TEST_FIFO=/path` makes the app read command words from a FIFO
-    /// ("faster", "slower", "go", "stop", "top", "state") so the voice path and the player
+    /// ("faster", "slower", "go", "stop", "top", "next", "chords", "state") so the voice path and the player
     /// can be driven without a microphone. "state" appends a JSON line to `$TABS_TEST_FIFO.out`.
     func installTestHook() {
         guard let path = ProcessInfo.processInfo.environment["TABS_TEST_FIFO"] else { return }
@@ -237,6 +237,8 @@ struct ContentView: View {
                                 view.cacheDisplay(in: view.bounds, to: rep)
                                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: String(w.dropFirst(5))))
                             }
+                        } else if w == "next" { cycleVersion()
+                        } else if w == "chords" { player.showChords.toggle()
                         } else { voice.apply(w) }
                     }
                 }

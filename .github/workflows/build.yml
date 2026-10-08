@@ -1,0 +1,12 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build -c release
+      - run: make
+      - run: ditto -c -k --keepParent build/Tabs.app Tabs.app.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: Tabs.app, path: Tabs.app.zip }
