@@ -1,5 +1,48 @@
 # tabs-app — handover log
 
+> ## 🎸 v0.2: ICON + VERSIONS + SYSTEM APPEARANCE (2026-10-07/08) — READ THIS FIRST
+>
+> **Goal:** polish the viewer after v0.1 — app icon, one row per song with version switching,
+> follow the Mac's Light/Dark setting — and keep the `/tab` importer honest against real pages.
+>
+> **Tree is clean; HEAD `33aeb27` == `origin/master`.** Nothing uncommitted here. (The sibling
+> repo `daniel-dev-skills` carries UNRELATED uncommitted WIP from other sessions — a
+> `remote-tmux-orchestrator` → `tmux-orchestrator` rename, nsuna skill edits, `marpowerpoint/`.
+> Not this project's; do NOT stage it with `git add -A` there. The `tab` skill itself is
+> committed and pushed, `c2b6ef7`.)
+>
+> **What shipped:** `f7cbad3` app icon (`res/Tabs-icon.svg` is the source → `res/Tabs.icns`
+> via rsvg-convert + iconutil; `CFBundleIconFile` in `res/Info.plist`) + **song versions**:
+> `Song.group` collapses same artist+title into one sidebar row with a count badge, toolbar
+> segmented picker, right-click menu (+ Show in Finder), `n` cycles, last-used version
+> remembered per song; `version:` frontmatter key labels them; the plain-named file sorts
+> first. Library reload debounced 0.25 s + re-read at 1 s (create event fires before the
+> writer finishes). `cc48a0b` + `33aeb27` appearance: forced dark REMOVED, app follows the
+> system; `ScrollText` uses `labelColor` + an `NSColor(name:)` block for the stave. Harness
+> 26/26 (`make test`), every keystroke goes through `key` which re-asserts frontmost.
+> `/tab` skill: writes `version:`, names a repeat import `<Artist> - <Title> (<version>).tab`,
+> reads capo from `tab_view.meta` (the `tab.capo` field is null on UG). `~/Tabs` holds
+> The A Team (capo 2), Creep, Wish You Were Here ×2 (sample + UG tabs 104578).
+>
+> **Still wanted from Daniel:** a real-world tab PDF and a phone-photo scan (pdf/scan legs
+> were piloted on a synthesised PDF only); the live mic→speech hand test with a guitar.
+>
+> **Gotchas:** (1) ` #` inside a frontmatter value starts a comment — version labels carry
+> no hash. (2) Never call `withAlphaComponent()` on a dynamic NSColor: it freezes the colour
+> under the appearance current at that instant (how the stave went near-black on this
+> Light-mode Mac). (3) The harness drops keystrokes if ANY other window activates mid-run —
+> don't drive the screen while `make test` runs; a lone failure at "space pauses" is that.
+> (4) The in-app `shot` fallback is layout-only evidence; real evidence is `screencapture -l`.
+> (5) Select a sidebar row from a script with System Events `set selected of row N of
+> outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1 of window 1 to true`.
+>
+> **Next actions (none urgent):** 1. Daniel plays from it; report anything that reads wrong.
+> 2. Pilot `pdf`/`scan` on his real files when they arrive. 3. Nice-to-haves never asked for:
+> transpose, bpm metronome. Teal chord colour is a little light on white — only if he notices.
+>
+> **Pointers:** `README.md` (format incl. versions, keys, harness), `tests/ui.sh`,
+> `~/.claude/skills/tab/SKILL.md`, memory `tabs-app.md`.
+
 > ## 🎸 BACKED UP + /tab SKILL BUILT (2026-10-06, evening) — READ THIS FIRST
 >
 > **Done this session:** private repo `dan-slater/tabs-app` created and `master` pushed (the
