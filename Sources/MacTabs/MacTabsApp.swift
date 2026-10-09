@@ -2,13 +2,19 @@ import SwiftUI
 import AppKit
 
 @main
-struct TabsApp: App {
+struct MacTabsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var library = Library()
     @StateObject private var player = Player()
 
+    init() {
+        // One window that quits the app when closed, so restoring windows buys nothing, and an
+        // app killed with no window open would otherwise relaunch with nothing on screen.
+        UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
+    }
+
     var body: some Scene {
-        WindowGroup("Tabs") {
+        WindowGroup("MacTabs") {
             ContentView(library: library, player: player)
                 .frame(minWidth: 800, minHeight: 500)
         }

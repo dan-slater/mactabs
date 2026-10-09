@@ -7,6 +7,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: swift build -c release
       - run: make
-      - run: ditto -c -k --keepParent build/Tabs.app Tabs.app.zip
+      - run: ditto -c -k --keepParent build/MacTabs.app MacTabs.app.zip
       - uses: actions/upload-artifact@v4
-        with: { name: Tabs.app, path: Tabs.app.zip }
+        with: { name: MacTabs.app, path: MacTabs.app.zip }

@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Tabs",
+    name: "MacTabs",
     platforms: [.macOS(.v14)],
     dependencies: [
         // Chord diagrams + the tombatossals chords-db (MIT).
@@ -10,9 +10,9 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Tabs",
+            name: "MacTabs",
             dependencies: ["Fretboard"],
-            path: "Sources/Tabs"
+            path: "Sources/MacTabs"
         ),
     ]
 )

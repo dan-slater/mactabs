@@ -1,5 +1,5 @@
 #!/bin/bash
-# UI harness: launches build/Tabs.app against a throwaway library, drives it through the
+# UI harness: launches build/MacTabs.app against a throwaway library, drives it through the
 # TABS_TEST_FIFO hook (the same code path the voice commands use) and through real
 # keystrokes (System Events), reads state back as JSON and screenshots the window.
 #
@@ -8,11 +8,11 @@
 #                          leave the Mac alone while it runs
 #   KEEP=1 tests/ui.sh     leave the app open at the end
 #
-# Needs: build/Tabs.app (make), python3 for JSON, and — for the keystroke leg only —
+# Needs: build/MacTabs.app (make), python3 for JSON, and — for the keystroke leg only —
 # Accessibility permission for the terminal (the leg is skipped with a warning otherwise).
 set -u
 cd "$(dirname "$0")/.."
-APP=build/Tabs.app/Contents/MacOS/Tabs
+APP=build/MacTabs.app/Contents/MacOS/MacTabs
 WORK=$(mktemp -d /tmp/tabs-ui.XXXXXX)
 LIB=$WORK/Tabs; FIFO=$WORK/cmd; OUT=$FIFO.out; SHOTS=${SHOTS:-tests/shots}
 mkdir -p "$LIB" "$SHOTS"; mkfifo "$FIFO"
@@ -30,20 +30,29 @@ shot() { # real screenshot of the window (needs Screen Recording for the termina
 state(){ : > "$OUT"; say state; sleep 0.3; cat "$OUT"; }
 field(){ python3 -c "import json,sys; print(json.loads(sys.stdin.readline())['$1'])"; }
 key(){ # every keystroke re-asserts focus: anything activating another window mid-run would otherwise eat it
-  osascript -e 'tell application "System Events" to tell process "Tabs" to set frontmost to true' -e "tell application \"System Events\" to $1" 2>"$WORK/osa.err"
+  osascript -e 'tell application "System Events" to tell process "MacTabs" to set frontmost to true' -e "tell application \"System Events\" to $1" 2>"$WORK/osa.err"
 }
 check(){ # check <label> <python expr over s=state dict>
   local s; s=$(state)
   if python3 -c "import json,sys; s=json.loads(sys.stdin.readline()); sys.exit(0 if ($2) else 1)" <<<"$s"; then ok "$1"; else bad "$1  ← $s"; fi
 }
 
-pkill -x Tabs 2>/dev/null; sleep 0.3
-TABS_DIR="$LIB" TABS_TEST_FIFO="$FIFO" "$APP" >"$WORK/app.log" 2>&1 &
+pkill -x MacTabs 2>/dev/null; sleep 0.3
+# Remember who has focus so the fast run can hand it straight back.
+PREV=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)
+# Ignore saved window state: a run killed with no window open leaves the app restoring zero windows.
+TABS_DIR="$LIB" TABS_TEST_FIFO="$FIFO" "$APP" -ApplePersistenceIgnoreState YES >"$WORK/app.log" 2>&1 &
 PID=$!
 trap '[ -n "${KEEP:-}" ] || kill $PID 2>/dev/null; echo "work dir: $WORK"' EXIT
+# Opening the FIFO blocks until the app's window installs the reader; fail instead of hanging.
+( sleep 20; [ -e "$WORK/opened" ] || { echo "app never opened the test FIFO (no window?)" >&2; kill $$; } ) &
 exec 3>"$FIFO"   # one writer for the whole run: lines stream in order
+touch "$WORK/opened"
 sleep 2.5
 kill -0 $PID 2>/dev/null || { echo "app died:"; cat "$WORK/app.log"; exit 1; }
+if [ -z "${FULL:-}" ] && [ -n "$PREV" ] && [ "$PREV" != "MacTabs" ]; then
+  osascript -e "tell application \"System Events\" to set frontmost of process \"$PREV\" to true" 2>/dev/null
+fi
 
 echo "== load"
 check "first tab opened"              "s['tab']=='House of the Rising Sun'"

@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIconFile</key>
-	<string>Tabs</string>
-    <key>CFBundleName</key>              <string>Tabs</string>
-    <key>CFBundleDisplayName</key>       <string>Tabs</string>
+	<string>MacTabs</string>
+    <key>CFBundleName</key>              <string>MacTabs</string>
+    <key>CFBundleDisplayName</key>       <string>MacTabs</string>
     <key>CFBundleIdentifier</key>        <string>dev.danielslater.tabs</string>
-    <key>CFBundleExecutable</key>        <string>Tabs</string>
+    <key>CFBundleExecutable</key>        <string>MacTabs</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.0</string>
+    <key>CFBundleShortVersionString</key><string>0.2.1</string>
     <key>CFBundleVersion</key>           <string>1</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>

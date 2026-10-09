@@ -1,31 +1,31 @@
-# Tabs — an autoscrolling guitar-tab viewer for the Mac
+# MacTabs — an autoscrolling guitar-tab viewer for the Mac
 
-[![build](https://github.com/dan-slater/tabs-app/actions/workflows/build.yml/badge.svg)](https://github.com/dan-slater/tabs-app/actions/workflows/build.yml) · [Download](../../releases/latest) · MIT
+[![build](https://github.com/dan-slater/mactabs/actions/workflows/build.yml/badge.svg)](https://github.com/dan-slater/mactabs/actions/workflows/build.yml) · [Download](../../releases/latest) · MIT
 
 Put your hands on the guitar, hit space, and the tab scrolls at a speed you set once per song.
 Say "faster" or "slower" to adjust it without letting go of the neck. Chord diagrams for every
 chord in the song sit beside the text.
 
-![Tabs in light mode](docs/screenshot-light.png)
+![MacTabs in light mode](docs/screenshot-light.png)
 
 Plain text in, plain text out: a song is a `.tab` file in `~/Tabs` with a few lines of
 frontmatter above ordinary ASCII tab. No account, no database, no sync. Native SwiftUI + AppKit,
 one dependency ([Fretboard](https://github.com/itsmeichigo/Fretboard), MIT, for the chord
 diagrams and the chords-db it bundles). Follows the system Light/Dark setting.
 
-![Tabs in dark mode](docs/screenshot-dark.png)
+![MacTabs in dark mode](docs/screenshot-dark.png)
 
 ## Install
 
-**Download:** grab `Tabs.app.zip` from the [latest release](../../releases/latest), unzip, and
-drop `Tabs.app` into `~/Applications`. The app is signed ad hoc, not notarised, so the first
-launch is a right-click → Open (or `xattr -d com.apple.quarantine Tabs.app`). macOS 14 or later.
+**Download:** grab `MacTabs.app.zip` from the [latest release](../../releases/latest), unzip, and
+drop `MacTabs.app` into `~/Applications`. The app is signed ad hoc, not notarised, so the first
+launch is a right-click → Open (or `xattr -d com.apple.quarantine MacTabs.app`). macOS 14 or later.
 
 **Build from source** (Xcode command-line tools are enough):
 
 ```bash
-git clone https://github.com/dan-slater/tabs-app && cd tabs-app
-make install        # swift build → build/Tabs.app → ~/Applications
+git clone https://github.com/dan-slater/mactabs && cd mactabs
+make install        # swift build → build/MacTabs.app → ~/Applications
 ```
 
 `make run` builds and launches; `make` alone just builds. The app reads `~/Tabs`; set
