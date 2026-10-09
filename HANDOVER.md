@@ -1,3 +1,21 @@
+> ## 🎸 RENAMED TO MACTABS + v0.2.1 (2026-10-09) — READ THIS FIRST
+>
+> **Done:** app, repo and folder are now **MacTabs**: GitHub `dan-slater/mactabs` (old URL
+> redirects), local `~/dan-hub/mactabs`, `~/Applications/MacTabs.app` (old `Tabs.app` removed),
+> target `Sources/MacTabs`, `res/MacTabs.icns`. Bundle ID kept as `dev.danielslater.tabs` so
+> prefs and mic permission carry over; the library folder stays `~/Tabs`. Release **v0.2.1**
+> ships `MacTabs.app.zip`; CI green. `/tab` skill symlink repointed (`daniel-dev-skills`
+> `d1ebe11`). After moving the folder, `make clean` once: SwiftPM's module cache pins the path.
+>
+> **Bug fixed:** a launch after a force-quit showed NO window (saved state restored zero
+> windows). The app now registers `ApplePersistenceIgnoreState`. The harness passes it too,
+> returns focus to the previous app in the fast run, and a 20 s watchdog fails the run if the
+> test FIFO never opens (it used to hang forever).
+>
+> **Outstanding (Daniel is using the app himself first; launch posts wait):** see the list in
+> the 2026-10-09 session reply. Biggest gaps for strangers: empty library on first run, no
+> in-app import, folder only settable by env var, not notarised. `bpm:` is stored, unused.
+
 > ## 🚀 v0.2.0 PUBLIC ON GITHUB (2026-10-08, evening) — READ THIS FIRST
 >
 > **Done:** repo `dan-slater/tabs-app` is **PUBLIC**, MIT, description + topics set, CI
@@ -21,7 +39,7 @@
 > + voice in the README, notarisation (needs a paid Apple Developer account, R1 700/yr-ish).
 > Open from before: real-world PDF + phone scan to pilot `pdf`/`scan`; the live mic test.
 
-# tabs-app — handover log
+# MacTabs (was tabs-app) — handover log
 
 > ## 🎸 v0.2: ICON + VERSIONS + SYSTEM APPEARANCE (2026-10-07/08) — READ THIS FIRST
 >
