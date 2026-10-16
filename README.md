@@ -44,6 +44,7 @@ the sidebar at once.
 | c | show / hide the chord panel |
 | n | next version of this song (when there is more than one) |
 | v | voice commands on / off |
+| ⌘, | design options (also the sliders icon in the toolbar) |
 
 ## Voice
 

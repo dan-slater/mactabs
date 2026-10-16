@@ -20,6 +20,7 @@ struct MacTabsApp: App {
         }
         .defaultSize(width: 1200, height: 800)
         .commands { CommandGroup(replacing: .newItem) {} }
+        Settings { DesignPanel() }
     }
 }
 
@@ -39,6 +40,10 @@ struct ContentView: View {
     @State private var picked: [String: URL] = [:]  // which version of each song was last open
     @State private var query = ""
     @State private var monitor: Any?
+    @State private var showDesign = false
+    @AppStorage(DesignKey.versionPicker) private var versionPicker: VersionPickerStyle = .dropdown
+    @AppStorage(DesignKey.link) private var linkStyle: LinkStyle = .always
+    @AppStorage(DesignKey.chord) private var chordColour: ChordColour = .teal
 
     init(library: Library, player: Player) {
         self.library = library
@@ -86,27 +91,7 @@ struct ContentView: View {
         NavigationSplitView {
           VStack(spacing: 0) {   // the folder label sits under the list, never over a row
             List(filtered, selection: $selection) { song in
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(song.title).lineLimit(1)
-                        if !song.artist.isEmpty { Text(song.artist).font(.caption).foregroundStyle(.secondary) }
-                    }
-                    Spacer()
-                    if song.versions.count > 1 {
-                        Text("\(song.versions.count)")
-                            .font(.caption2.monospacedDigit())
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
-                            .help("\(song.versions.count) versions — right-click, or press n to cycle")
-                    }
-                    if let link = shown(song).sourceURL {
-                        Button { NSWorkspace.shared.open(link) } label: {
-                            Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Open on \(shown(song).sourceName)")
-                    }
-                }
+                SongRow(song: song, link: shown(song).sourceURL, linkName: shown(song).sourceName, style: linkStyle)
                 .tag(song.id)
                 .contextMenu {
                     ForEach(song.versions) { v in
@@ -131,25 +116,30 @@ struct ContentView: View {
         } detail: {
             if let tab = player.tab {
                 HSplitView {
-                    ScrollText(player: player, text: tab.body)
+                    ScrollText(player: player, text: tab.body, chord: chordColour.ns)
                     if player.showChords { ChordPanel(body_: tab.body) }
                 }
                 .overlay(alignment: .bottom) { hud(tab) }
                 .navigationTitle(tab.artist.isEmpty ? tab.title : "\(tab.artist) — \(tab.title)")
                 .toolbar {
-                    if let song = currentSong, song.versions.count > 1 {
+                    if let song = currentSong, song.versions.count > 1, versionPicker != .hidden {
                         ToolbarItem(placement: .principal) {
-                            Picker("Version", selection: Binding(
+                            let picker = Picker("Version", selection: Binding(
                                 get: { player.tab?.url ?? song.versions[0].url },
                                 set: { url in if let v = song.versions.first(where: { $0.url == url }) { openVersion(v) } })) {
                                 ForEach(song.versions) { v in Text(v.version).tag(v.url) }
                             }
-                            .pickerStyle(.menu)
                             .labelsHidden()
                             .fixedSize()
                             .help("\(song.versions.count) versions — press n to cycle")
                             .accessibilityIdentifier("versionPicker")
+                            if versionPicker == .segmented { picker.pickerStyle(.segmented) } else { picker.pickerStyle(.menu) }
                         }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { showDesign.toggle() } label: { Image(systemName: "slider.horizontal.3") }
+                            .help("Design options (⌘,)")
+                            .popover(isPresented: $showDesign, arrowEdge: .bottom) { DesignPanel() }
                     }
                 }
             } else {
@@ -284,5 +274,40 @@ struct ContentView: View {
         if let v = view as? T, (v as? NSScrollView)?.documentView is NSTextView { return v }
         for sub in view.subviews { if let f = find(type, in: sub) { return f } }
         return nil
+    }
+}
+
+/// One sidebar row. Its own view so it can track the pointer for the "On hover" link style.
+struct SongRow: View {
+    let song: Song
+    let link: URL?
+    let linkName: String
+    let style: LinkStyle
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(song.title).lineLimit(1)
+                if !song.artist.isEmpty { Text(song.artist).font(.caption).foregroundStyle(.secondary) }
+            }
+            Spacer()
+            if song.versions.count > 1 {
+                Text("\(song.versions.count)")
+                    .font(.caption2.monospacedDigit())
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                    .help("\(song.versions.count) versions — right-click, or press n to cycle")
+            }
+            if let link, style == .always || (style == .hover && hovering) {
+                Button { NSWorkspace.shared.open(link) } label: {
+                    Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Open on \(linkName)")
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct ScrollText: NSViewRepresentable {
     @ObservedObject var player: Player
     let text: String
+    var chord: NSColor = .systemTeal
 
     func makeCoordinator() -> Coordinator { Coordinator(player: player) }
 
@@ -40,12 +41,13 @@ struct ScrollText: NSViewRepresentable {
         let c = context.coordinator
         guard let tv = c.textView else { return }
         let fitted = Self.fit(player.fontSize, text: text, width: scroll.contentSize.width - 48)
-        if c.text != text || c.fontSize != fitted {
+        if c.text != text || c.fontSize != fitted || c.chord != chord {
             c.text = text
             c.fontSize = fitted
+            c.chord = chord
             // Pad the end so the last line can scroll up to the top of the window.
             let pad = Int(scroll.bounds.height * 0.6 / max(1, fitted * 1.5))
-            tv.textStorage?.setAttributedString(Self.style(text + String(repeating: "\n", count: pad), size: fitted))
+            tv.textStorage?.setAttributedString(Self.style(text + String(repeating: "\n", count: pad), size: fitted, chord: chord))
             tv.textContainerInset = NSSize(width: 24, height: 40)
             tv.layoutManager?.ensureLayout(for: tv.textContainer!)
             scroll.contentView.setBoundsOrigin(.zero)
@@ -75,7 +77,7 @@ struct ScrollText: NSViewRepresentable {
         return min(requested, max(10, fits))
     }
 
-    static func style(_ text: String, size: CGFloat) -> NSAttributedString {
+    static func style(_ text: String, size: CGFloat, chord: NSColor = .systemTeal) -> NSAttributedString {
         let mono = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let out = NSMutableAttributedString()
         let para = NSMutableParagraphStyle()
@@ -88,7 +90,7 @@ struct ScrollText: NSViewRepresentable {
                 attrs[.font] = NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
                 attrs[.foregroundColor] = NSColor.systemOrange
             } else if Chords.isChordLine(line) {
-                attrs[.foregroundColor] = NSColor.systemTeal
+                attrs[.foregroundColor] = chord
                 attrs[.font] = NSFont.monospacedSystemFont(ofSize: size, weight: .semibold)
             } else if line.contains("|") && line.contains("-") {
                 attrs[.foregroundColor] = Self.stave
@@ -105,6 +107,7 @@ struct ScrollText: NSViewRepresentable {
         weak var textView: NSTextView?
         var text = ""
         var fontSize: CGFloat = 0
+        var chord: NSColor?
         private var timer: Timer?
         private var last = CACurrentMediaTime()
         private var accumulated: CGFloat = 0
