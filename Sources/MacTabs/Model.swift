@@ -11,6 +11,15 @@ struct TabFile: Identifiable, Hashable {
     var title: String { meta["title"] ?? url.deletingPathExtension().lastPathComponent }
     var artist: String { meta["artist"] ?? "" }
     var scroll: Double { Double(meta["scroll"] ?? "") ?? 1.0 }
+    /// The web page the tab came from (the `source:` key), when it is a link.
+    var sourceURL: URL? {
+        guard let s = meta["source"]?.trimmingCharacters(in: .whitespaces),
+              s.hasPrefix("http://") || s.hasPrefix("https://") else { return nil }
+        return URL(string: s)
+    }
+    var sourceName: String {
+        sourceURL?.host?.contains("ultimate-guitar.com") == true ? "Ultimate Guitar" : (sourceURL?.host ?? "")
+    }
 
     /// Files with the same artist + title are versions of one song. The label comes from a
     /// `version:` key, else a trailing "(…)" in the file name, else the file name itself.

@@ -124,11 +124,13 @@ shot 05-library
 
 echo "== versions (same artist + title = one row)"
 check "sample version label"          "s['version']=='sample'"
+check "no link when source is not a URL" "s['link']==''"
 cat > "$LIB/Traditional - House of the Rising Sun (UG tabs 1234).tab" <<'EOF'
 ---
 title: House of the Rising Sun
 artist: Traditional
 version: UG tabs 1234
+source: https://tabs.ultimate-guitar.com/tab/1234
 scroll: 0.9
 ---
 [Intro]
@@ -138,6 +140,7 @@ sleep 1.2
 check "open tab unchanged by a new version" "s['tab']=='House of the Rising Sun' and s['version']=='sample'"
 say next; sleep 0.6
 check "next cycles to the other version"  "s['version']=='UG tabs 1234' and abs(s['fileScroll']-0.9)<1e-6"
+check "UG source becomes the row link"    "s['link']=='https://tabs.ultimate-guitar.com/tab/1234'"
 shot 06-versions
 say next; sleep 0.6
 check "next wraps back to the first version" "s['version']=='sample'"

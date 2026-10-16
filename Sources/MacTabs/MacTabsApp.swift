@@ -68,6 +68,12 @@ struct ContentView: View {
         player.open(tab)
     }
 
+    /// The version a song's row stands for: the open one, else the last picked, else the first.
+    func shown(_ song: Song) -> TabFile {
+        song.versions.first { $0.url == player.tab?.url }
+            ?? song.versions.first { $0.url == picked[song.id] } ?? song.versions[0]
+    }
+
     func cycleVersion() {
         guard let song = currentSong, song.versions.count > 1 else { return }
         let i = song.versions.firstIndex { $0.url == player.tab?.url } ?? 0
@@ -78,6 +84,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
+          VStack(spacing: 0) {   // the folder label sits under the list, never over a row
             List(filtered, selection: $selection) { song in
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -92,6 +99,13 @@ struct ContentView: View {
                             .background(.quaternary, in: Capsule())
                             .help("\(song.versions.count) versions — right-click, or press n to cycle")
                     }
+                    if let link = shown(song).sourceURL {
+                        Button { NSWorkspace.shared.open(link) } label: {
+                            Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Open on \(shown(song).sourceName)")
+                    }
                 }
                 .tag(song.id)
                 .contextMenu {
@@ -101,16 +115,19 @@ struct ContentView: View {
                         }
                     }
                     Divider()
+                    if let link = shown(song).sourceURL {
+                        Button("Open on \(shown(song).sourceName)") { NSWorkspace.shared.open(link) }
+                    }
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(song.versions.map(\.url)) }
                 }
             }
             .accessibilityIdentifier("tabList")
-            .searchable(text: $query, placement: .sidebar, prompt: "Filter")
-            .navigationSplitViewColumnWidth(min: 180, ideal: 240)
-            .overlay(alignment: .bottom) {
-                Text(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                    .font(.caption2).foregroundStyle(.tertiary).padding(6)
-            }
+            Text(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                .font(.caption2).foregroundStyle(.tertiary).padding(6)
+                .frame(maxWidth: .infinity)
+          }
+          .searchable(text: $query, placement: .sidebar, prompt: "Filter")
+          .navigationSplitViewColumnWidth(min: 180, ideal: 240)
         } detail: {
             if let tab = player.tab {
                 HSplitView {
@@ -233,7 +250,7 @@ struct ContentView: View {
                                 lm.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs)) { _, _, _, _, _ in frags += 1 }
                             }
                             let srcLines = ((sv?.documentView as? NSTextView)?.string ?? "").components(separatedBy: "\n").count - 1
-                            let s = "{\"running\":\(player.running),\"speed\":\(player.speed),\"y\":\(y),\"fragments\":\(frags),\"lines\":\(srcLines),\"fontSize\":\(player.fontSize),\"tab\":\"\(player.tab?.title ?? "")\",\"version\":\"\(player.tab?.version ?? "")\",\"chords\":\(player.showChords),\"fileScroll\":\(player.tab?.scroll ?? -1),\"window\":\(NSApp.windows.first?.windowNumber ?? -1)}\n"
+                            let s = "{\"running\":\(player.running),\"speed\":\(player.speed),\"y\":\(y),\"fragments\":\(frags),\"lines\":\(srcLines),\"fontSize\":\(player.fontSize),\"tab\":\"\(player.tab?.title ?? "")\",\"version\":\"\(player.tab?.version ?? "")\",\"chords\":\(player.showChords),\"fileScroll\":\(player.tab?.scroll ?? -1),\"link\":\"\(player.tab?.sourceURL?.absoluteString ?? "")\",\"window\":\(NSApp.windows.first?.windowNumber ?? -1)}\n"
                             if let out = FileHandle(forWritingAtPath: path + ".out") { out.seekToEndOfFile(); out.write(s.data(using: .utf8)!) }
                             else { try? s.write(toFile: path + ".out", atomically: true, encoding: .utf8) }
                         } else if w.hasPrefix("shot ") {

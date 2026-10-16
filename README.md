@@ -80,6 +80,8 @@ There is a house in New Orleans
 - A line made only of chord names (`C  G/B  Am7`) is a chord line and feeds the chord panel.
   Everything else is shown as is. Lines never wrap: the font shrinks to fit the longest line,
   down to 10 pt, and anything wider scrolls sideways.
+- When `source` is a web link, the song's sidebar row gets a small ↗ icon (and a right-click
+  item) that opens that page in your browser, e.g. the Ultimate Guitar page it was imported from.
 - `scroll` is the only key the app writes. Every other key is yours; no frontmatter is fine too.
 - **Versions.** Files with the same `artist` + `title` are one song: one sidebar row with a
   count badge, a picker in the toolbar, the versions in the row's right-click menu, and `n`
