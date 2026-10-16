@@ -84,7 +84,7 @@ There is a house in New Orleans
   item) that opens that page in your browser, e.g. the Ultimate Guitar page it was imported from.
 - `scroll` is the only key the app writes. Every other key is yours; no frontmatter is fine too.
 - **Versions.** Files with the same `artist` + `title` are one song: one sidebar row with a
-  count badge, a picker in the toolbar, the versions in the row's right-click menu, and `n`
+  count badge, a dropdown in the toolbar, the versions in the row's right-click menu, and `n`
   cycles them. The label is the `version:` key (`UG chords 4169`, `capo 2`, `live`), else the
   `(…)` suffix of the file name. The plain `<Artist> - <Title>.tab` always sorts first. Note
   that ` #` inside a frontmatter value starts a comment, so write `UG tabs 104578`, not `#104578`.

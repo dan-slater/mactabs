@@ -144,7 +144,10 @@ struct ContentView: View {
                                 set: { url in if let v = song.versions.first(where: { $0.url == url }) { openVersion(v) } })) {
                                 ForEach(song.versions) { v in Text(v.version).tag(v.url) }
                             }
-                            .pickerStyle(.segmented)
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .fixedSize()
+                            .help("\(song.versions.count) versions — press n to cycle")
                             .accessibilityIdentifier("versionPicker")
                         }
                     }
