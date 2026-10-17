@@ -38,7 +38,9 @@ check(){ # check <label> <python expr over s=state dict>
   if python3 -c "import json,sys; s=json.loads(sys.stdin.readline()); sys.exit(0 if ($2) else 1)" <<<"$s"; then ok "$1"; else bad "$1  ← $s"; fi
 }
 
-pkill -x MacTabs 2>/dev/null; sleep 0.3
+# Only the visible run needs the real app closed (keystrokes target the process by name).
+# The hidden run leaves Daniel's open MacTabs alone and only ever kills its own PID.
+[ -n "${FULL:-}" ] && { pkill -x MacTabs 2>/dev/null; sleep 0.3; }
 # Remember who has focus so the fast run can hand it straight back.
 PREV=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)
 # Ignore saved window state: a run killed with no window open leaves the app restoring zero windows.
