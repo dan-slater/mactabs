@@ -41,7 +41,7 @@ struct ContentView: View {
     @State private var query = ""
     @State private var monitor: Any?
     @State private var showDesign = false
-    @AppStorage(DesignKey.versionPicker) private var versionPicker: VersionPickerStyle = .dropdown
+    @AppStorage(DesignKey.tabActions) private var tabActions: TabActionsLayout = .above
     @AppStorage(DesignKey.link) private var linkStyle: LinkStyle = .always
     @AppStorage(DesignKey.chord) private var chordColour: ChordColour = .teal
 
@@ -115,14 +115,32 @@ struct ContentView: View {
           .navigationSplitViewColumnWidth(min: 180, ideal: 240)
         } detail: {
             if let tab = player.tab {
+              VStack(alignment: .leading, spacing: 0) {
+                if tabActions == .above {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(tab.title).font(.title2.weight(.semibold)).lineLimit(1)
+                            if !tab.artist.isEmpty { Text(tab.artist).font(.title3).foregroundStyle(.secondary).lineLimit(1) }
+                        }
+                    }
+                    .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 2)
+                }
                 HSplitView {
                     ScrollText(player: player, text: tab.body, chord: chordColour.ns)
                     if player.showChords { ChordPanel(body_: tab.body) }
                 }
+              }
                 .overlay(alignment: .bottom) { hud(tab) }
-                .navigationTitle(tab.artist.isEmpty ? tab.title : "\(tab.artist) — \(tab.title)")
+                // Above-title layout shows the name in the pane, so the toolbar title stays empty.
+                .navigationTitle(tabActions == .above ? "" : (tab.artist.isEmpty ? tab.title : "\(tab.artist) — \(tab.title)"))
                 .toolbar {
-                    if let song = currentSong, song.versions.count > 1, versionPicker != .hidden {
+                    if tabActions == .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                        }
+                    }
+                    if let song = currentSong, song.versions.count > 1, tabActions == .dropdown {
                         ToolbarItem(placement: .principal) {
                             let picker = Picker("Version", selection: Binding(
                                 get: { player.tab?.url ?? song.versions[0].url },
@@ -133,7 +151,7 @@ struct ContentView: View {
                             .fixedSize()
                             .help("\(song.versions.count) versions — press n to cycle")
                             .accessibilityIdentifier("versionPicker")
-                            if versionPicker == .segmented { picker.pickerStyle(.segmented) } else { picker.pickerStyle(.menu) }
+                            picker.pickerStyle(.menu)
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {

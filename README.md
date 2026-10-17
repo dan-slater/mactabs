@@ -32,6 +32,11 @@ make install        # swift build → build/MacTabs.app → ~/Applications
 `TABS_DIR=/path` to point it elsewhere. The folder is watched, so a file dropped in appears in
 the sidebar at once.
 
+## The icon row
+
+Above the song's name: versions (a menu, with the count), the source page, chord diagrams,
+voice, full screen, and export (share the file, copy the text, show in Finder).
+
 ## Keys
 
 | Key | Does |

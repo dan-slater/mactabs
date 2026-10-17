@@ -5,8 +5,8 @@ import AppKit
 // Adding a fork: one enum here, one @AppStorage key, one row in DesignPanel.
 // When Daniel picks: bake the choice in, delete the enum and its row.
 
-enum VersionPickerStyle: String, CaseIterable, Identifiable {
-    case dropdown = "Dropdown", segmented = "Tabs", hidden = "Hidden"
+enum TabActionsLayout: String, CaseIterable, Identifiable {
+    case above = "Icons above title", toolbar = "Icons in toolbar", dropdown = "Dropdown (before)"
     var id: String { rawValue }
 }
 
@@ -29,23 +29,23 @@ enum ChordColour: String, CaseIterable, Identifiable {
 }
 
 enum DesignKey {
-    static let versionPicker = "design.versionPicker"
+    static let tabActions = "design.tabActions"
     static let link = "design.link"
     static let chord = "design.chordColour"
 }
 
 struct DesignPanel: View {
-    @AppStorage(DesignKey.versionPicker) private var versionPicker: VersionPickerStyle = .dropdown
+    @AppStorage(DesignKey.tabActions) private var tabActions: TabActionsLayout = .above
     @AppStorage(DesignKey.link) private var link: LinkStyle = .always
     @AppStorage(DesignKey.chord) private var chord: ChordColour = .teal
 
     var body: some View {
         Form {
-            row("Version picker", $versionPicker)
+            row("Tab actions", $tabActions)
             row("Source link", $link)
             row("Chord colour", $chord)
             Button("Reset all") {
-                versionPicker = .dropdown; link = .always; chord = .teal
+                tabActions = .above; link = .always; chord = .teal
             }
             .controlSize(.small)
         }
