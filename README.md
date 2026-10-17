@@ -35,7 +35,7 @@ the sidebar at once.
 ## The icon row
 
 Above the song's name: versions (a menu, with the count), the source page, chord diagrams,
-voice, full screen, and export (share the file, copy the text, show in Finder).
+voice, full screen, and export (save as PDF, share the file, copy the text, show in Finder).
 
 ## Keys
 
@@ -124,8 +124,8 @@ skill in [dan-slater/daniel-dev-skills](https://github.com/dan-slater/daniel-dev
 ## Testing
 
 ```bash
-make test        # build + the FIFO harness (19 checks; needs no focus, keep working)
-make test-full   # + the real-keystroke leg (26 checks; it steals focus, leave the Mac alone)
+make test        # build + the FIFO harness, app invisible (no window, no Dock icon, no focus)
+make test-full   # visible, + the real-keystroke leg (steals focus, leave the Mac alone)
 ```
 
 `tests/ui.sh` launches the built bundle against a throwaway library and drives it two ways:

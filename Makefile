@@ -4,6 +4,7 @@
 # make test       build + drive the app through the FIFO harness (tests/ui.sh; no focus steal)
 # make test-full  the same plus the real-keystroke leg (steals focus — leave the Mac alone)
 # make install    copy the bundle to ~/Applications
+# make reload     install, and if MacTabs is running, reopen it in the background (no focus steal)
 APP    := MacTabs
 BUILD  := build
 BUNDLE := $(BUILD)/$(APP).app
@@ -37,7 +38,10 @@ install: all
 	rm -rf ~/Applications/$(APP).app
 	cp -R $(BUNDLE) ~/Applications/
 
+reload: install
+	@if pgrep -x MacTabs >/dev/null; then osascript -e 'tell application "MacTabs" to quit'; sleep 1; open -g ~/Applications/$(APP).app; fi
+
 clean:
 	rm -rf $(BUILD) .build
 
-.PHONY: all run test test-full install clean
+.PHONY: all run test test-full install reload clean

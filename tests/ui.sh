@@ -22,7 +22,8 @@ pass=0; fail=0
 ok()   { echo "  ✓ $1"; pass=$((pass+1)); }
 bad()  { echo "  ✗ $1"; fail=$((fail+1)); }
 say()  { echo "$1" >&3; }
-shot() { # real screenshot of the window (needs Screen Recording for the terminal; falls back to the in-app render)
+shot() { [ -n "$HIDE" ] && return 0  # nothing to see in the hidden run
+  # real screenshot of the window (needs Screen Recording for the terminal; falls back to the in-app render)
   local w; w=$(state | field window)
   screencapture -x -o -l "$w" "$PWD/$SHOTS/$1.png" 2>/dev/null && [ -s "$PWD/$SHOTS/$1.png" ] || say "shot $PWD/$SHOTS/$1.png"
   sleep 0.3
@@ -41,7 +42,8 @@ pkill -x MacTabs 2>/dev/null; sleep 0.3
 # Remember who has focus so the fast run can hand it straight back.
 PREV=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)
 # Ignore saved window state: a run killed with no window open leaves the app restoring zero windows.
-TABS_DIR="$LIB" TABS_TEST_FIFO="$FIFO" "$APP" -ApplePersistenceIgnoreState YES >"$WORK/app.log" 2>&1 &
+HIDE=; [ -z "${FULL:-}" ] && HIDE=1   # fast run: invisible window, no Dock icon, no focus
+env TABS_DIR="$LIB" TABS_TEST_FIFO="$FIFO" ${HIDE:+TABS_TEST_HIDDEN=1} "$APP" -ApplePersistenceIgnoreState YES >"$WORK/app.log" 2>&1 &
 PID=$!
 trap '[ -n "${KEEP:-}" ] || kill $PID 2>/dev/null; echo "work dir: $WORK"' EXIT
 # Opening the FIFO blocks until the app's window installs the reader; fail instead of hanging.
@@ -80,6 +82,13 @@ grep -q "^scroll: 0.79" "$LIB/Traditional - House of the Rising Sun.tab" && ok "
 grep -q "^\[Outro\]" "$LIB/Traditional - House of the Rising Sun.tab" && ok "body intact after rewrite" || bad "body lost on rewrite"
 say top; sleep 0.6
 check "'top' returns to the start"    "s['y']<1"
+
+echo "== export"
+say "pdf $WORK/out.pdf"; sleep 1.5
+head -c 4 "$WORK/out.pdf" 2>/dev/null | grep -q '%PDF' && ok "Save as PDF writes a PDF" || bad "no PDF written"
+if command -v pdftotext >/dev/null; then
+  pdftotext "$WORK/out.pdf" - 2>/dev/null | grep -q "House of the Rising Sun" && ok "PDF carries the song's name and text" || bad "PDF text missing"
+fi
 
 echo "== keyboard (System Events)"
 if [ -z "${FULL:-}" ]; then echo "  - skipped (FULL=1 runs it)"

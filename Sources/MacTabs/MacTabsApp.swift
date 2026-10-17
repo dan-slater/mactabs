@@ -25,7 +25,11 @@ struct MacTabsApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// `TABS_TEST_HIDDEN=1` (the fast test run): no Dock icon, no focus, an invisible window.
+    static let hidden = ProcessInfo.processInfo.environment["TABS_TEST_HIDDEN"] != nil
+
     func applicationDidFinishLaunching(_ n: Notification) {
+        if Self.hidden { NSApp.setActivationPolicy(.accessory); return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -41,9 +45,6 @@ struct ContentView: View {
     @State private var query = ""
     @State private var monitor: Any?
     @State private var showDesign = false
-    @AppStorage(DesignKey.tabActions) private var tabActions: TabActionsLayout = .above
-    @AppStorage(DesignKey.link) private var linkStyle: LinkStyle = .always
-    @AppStorage(DesignKey.chord) private var chordColour: ChordColour = .teal
 
     init(library: Library, player: Player) {
         self.library = library
@@ -91,7 +92,7 @@ struct ContentView: View {
         NavigationSplitView {
           VStack(spacing: 0) {   // the folder label sits under the list, never over a row
             List(filtered, selection: $selection) { song in
-                SongRow(song: song, link: shown(song).sourceURL, linkName: shown(song).sourceName, style: linkStyle)
+                SongRow(song: song)
                 .tag(song.id)
                 .contextMenu {
                     ForEach(song.versions) { v in
@@ -100,9 +101,6 @@ struct ContentView: View {
                         }
                     }
                     Divider()
-                    if let link = shown(song).sourceURL {
-                        Button("Open on \(shown(song).sourceName)") { NSWorkspace.shared.open(link) }
-                    }
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(song.versions.map(\.url)) }
                 }
             }
@@ -116,48 +114,32 @@ struct ContentView: View {
         } detail: {
             if let tab = player.tab {
               VStack(alignment: .leading, spacing: 0) {
-                if tabActions == .above {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Spacer()
+                            TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                        }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(tab.title).font(.title2.weight(.semibold)).lineLimit(1)
                             if !tab.artist.isEmpty { Text(tab.artist).font(.title3).foregroundStyle(.secondary).lineLimit(1) }
                         }
                     }
                     .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 2)
-                }
                 HSplitView {
-                    ScrollText(player: player, text: tab.body, chord: chordColour.ns)
+                    ScrollText(player: player, text: tab.body)
                     if player.showChords { ChordPanel(body_: tab.body) }
                 }
               }
                 .overlay(alignment: .bottom) { hud(tab) }
-                // Above-title layout shows the name in the pane, so the toolbar title stays empty.
-                .navigationTitle(tabActions == .above ? "" : (tab.artist.isEmpty ? tab.title : "\(tab.artist) — \(tab.title)"))
+                // The name is shown large in the pane, so the toolbar title stays empty.
+                .navigationTitle("")
                 .toolbar {
-                    if tabActions == .toolbar {
+                    if DesignPanel.hasForks {
                         ToolbarItem(placement: .primaryAction) {
-                            TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                            Button { showDesign.toggle() } label: { Image(systemName: "slider.horizontal.3") }
+                                .help("Design options (⌘,)")
+                                .popover(isPresented: $showDesign, arrowEdge: .bottom) { DesignPanel() }
                         }
-                    }
-                    if let song = currentSong, song.versions.count > 1, tabActions == .dropdown {
-                        ToolbarItem(placement: .principal) {
-                            let picker = Picker("Version", selection: Binding(
-                                get: { player.tab?.url ?? song.versions[0].url },
-                                set: { url in if let v = song.versions.first(where: { $0.url == url }) { openVersion(v) } })) {
-                                ForEach(song.versions) { v in Text(v.version).tag(v.url) }
-                            }
-                            .labelsHidden()
-                            .fixedSize()
-                            .help("\(song.versions.count) versions — press n to cycle")
-                            .accessibilityIdentifier("versionPicker")
-                            picker.pickerStyle(.menu)
-                        }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { showDesign.toggle() } label: { Image(systemName: "slider.horizontal.3") }
-                            .help("Design options (⌘,)")
-                            .popover(isPresented: $showDesign, arrowEdge: .bottom) { DesignPanel() }
                     }
                 }
             } else {
@@ -183,6 +165,10 @@ struct ContentView: View {
             installKeys()
             if selection == nil, let first = songs.first { selection = first.id }
             installTestHook()
+            if AppDelegate.hidden {
+                // Still laid out and drawn (the harness reads scroll state), just never seen or clicked.
+                for w in NSApp.windows { w.alphaValue = 0; w.ignoresMouseEvents = true }
+            }
         }
     }
 
@@ -235,7 +221,7 @@ struct ContentView: View {
     }
 
     /// Test hook: `TABS_TEST_FIFO=/path` makes the app read command words from a FIFO
-    /// ("faster", "slower", "go", "stop", "top", "next", "chords", "state") so the voice path and the player
+    /// ("faster", "slower", "go", "stop", "top", "next", "chords", "pdf <path>", "state") so the voice path and the player
     /// can be driven without a microphone. "state" appends a JSON line to `$TABS_TEST_FIFO.out`.
     func installTestHook() {
         guard let path = ProcessInfo.processInfo.environment["TABS_TEST_FIFO"] else { return }
@@ -271,6 +257,8 @@ struct ContentView: View {
                                 view.cacheDisplay(in: view.bounds, to: rep)
                                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: String(w.dropFirst(5))))
                             }
+                        } else if w.hasPrefix("pdf "), let tab = player.tab {
+                            PDFExport.write(tab, to: URL(fileURLWithPath: String(w.dropFirst(4))))
                         } else if w == "next" { cycleVersion()
                         } else if w == "chords" { player.showChords.toggle()
                         } else { voice.apply(w) }
@@ -295,13 +283,9 @@ struct ContentView: View {
     }
 }
 
-/// One sidebar row. Its own view so it can track the pointer for the "On hover" link style.
+/// One sidebar row: title, artist, and a count badge when the song has several versions.
 struct SongRow: View {
     let song: Song
-    let link: URL?
-    let linkName: String
-    let style: LinkStyle
-    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -317,15 +301,6 @@ struct SongRow: View {
                     .background(.quaternary, in: Capsule())
                     .help("\(song.versions.count) versions — right-click, or press n to cycle")
             }
-            if let link, style == .always || (style == .hover && hovering) {
-                Button { NSWorkspace.shared.open(link) } label: {
-                    Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .help("Open on \(linkName)")
-            }
         }
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
     }
 }

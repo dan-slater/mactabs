@@ -14,13 +14,17 @@ When Daniel asks for a UI change, ship **several options at once** behind the gl
   the default.
 - When he picks one, bake it in and delete that enum and its row. Do not let old forks pile up.
 
-Verification for a UI change is: `make install`, relaunch the app, tell him what to click.
-**No `make test` and no screenshot loop** for UI-only work. It is too slow and it takes
-over his Mac.
+Verification for a UI change is: `make reload`, then tell him what to click. `make reload`
+installs and, only if MacTabs is already running, reopens it in the background (`open -g`),
+so it never jumps in front of what he is doing. **No `make test` and no screenshot loop**
+for UI-only work.
 
-Run `make test` (FIFO only, no focus steal) when behaviour changes: the parser, scrolling,
-versions, the folder watch, voice. Run `make test-full` only before a release, and only
-when he is away from the Mac.
+Run `make test` when behaviour changes: the parser, scrolling, versions, export, the folder
+watch, voice. It runs the app invisibly (`TABS_TEST_HIDDEN=1`: alpha-0 window, no Dock icon,
+no focus) and drives it through the FIFO only. Run `make test-full` (visible, real
+keystrokes, steals focus) only before a release, and only when he is away from the Mac.
+Never launch the app in the foreground while he is working (2026-10-17: "why does the
+program keep opening on my screen while you are developing?").
 
 ## Repo hygiene
 
