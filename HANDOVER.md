@@ -1,3 +1,67 @@
+# MacTabs (was tabs-app) — handover log
+
+> ## 🎸 FINISH LINE PLANNED: PLAY TEST → v0.3.0 → LAUNCH DRAFTS (2026-11-06) — READ THIS FIRST
+>
+> **Goal:** finish MacTabs: play test with the guitar, fix what it finds plus the new-user
+> gaps, release v0.3.0, then draft the launch posts.
+>
+> **UNCOMMITTED WIP:** none. This chat only got its bearings and committed the 2026-10-17 block below.
+> HEAD == `origin/master` after this commit.
+>
+> **What shipped:** nothing new in code. State is still the 2026-10-17 block below (icon row,
+> PDF export, invisible tests; unreleased since v0.2.1).
+>
+> **Blockers:** the play test (Daniel with a guitar; the voice words have never been tried
+> over real strumming). The new-user gaps can be built without him:
+> 1. Empty library on first run: seed the public-domain sample into a new `~/Tabs`.
+> 2. No in-app import: drag `.tab`/`.txt` files onto the window, or File > Import.
+> 3. The library folder is only settable with `TABS_DIR` (`Model.swift:108`): add a
+>    "Choose folder…" setting, persisted.
+>
+> **Gotchas:** as in the 2026-10-17 block. Keep the marketing session clear of paramaterial's
+> Show HN (Tue 10 Nov 15:00).
+>
+> **Pointers:** `Sources/MacTabs/Model.swift` (library folder), `CLAUDE.md`, the block below.
+>
+> Next: sessions/mactabs.md, session 2026-11-06-playtest (Fri 6 Nov evening).
+
+> ## 🎸 ICON ROW + PDF + INVISIBLE TESTS, READY FOR THE PLAY TEST (2026-10-17) — READ THIS FIRST
+>
+> **Goal:** make MacTabs pleasant to use and portfolio-ready: Daniel plays from it, then
+> v0.3.0 ships to GitHub and a week of marketing gets planned.
+>
+> **UNCOMMITTED WIP:** only this HANDOVER block. Everything else is committed and pushed;
+> HEAD `8e4eefe` == `origin/master` (`dan-slater/mactabs`, public). Keep it.
+>
+> **What shipped (since v0.2.1, all unreleased; the last release is v0.2.1):**
+> - Daniel's 34 Ultimate Guitar favourites imported into `~/Tabs` (37 files, 35 songs).
+>   Rhiannon's favourite was an "Official" (no text) tab, so the most-voted chords version was
+>   taken. The UG cookie file was deleted; Daniel was told to log out of UG to kill the cookie
+>   he pasted into the chat.
+> - Icon row right-aligned above the song name (`TabActions.swift`): versions menu, source page
+>   (the ONLY place the source link lives), chords, voice, full screen, export (Save as PDF,
+>   share, copy text, Show in Finder). Toolbar title blank; the name is shown large in the pane.
+> - Save as PDF (`PDFExport`, A4, aqua appearance so it is dark on white in dark mode).
+> - Design switcher (`Design.swift`, ⌘, / toolbar sliders): all forks settled and removed;
+>   `DesignPanel.hasForks = false` hides the button until the next UI request. Rules in `CLAUDE.md`.
+> - Fixes: songs opened one line down (automatic toolbar insets, now off in `ScrollText`);
+>   the sidebar folder label covered the last row.
+> - Tests: `make test` runs the app INVISIBLY (`TABS_TEST_HIDDEN`: alpha 0, no Dock icon, no
+>   focus) and no longer quits Daniel's open copy; `make reload` reinstalls and reopens in the
+>   background. 23/23, incl. two PDF checks via the FIFO word `pdf <path>`.
+>
+> **Blockers:** none. Waiting on Daniel: the play test with a guitar (voice words over strumming).
+>
+> **Gotchas:** (1) UI work = several options behind the Design switcher, verify with
+> `make reload` only, no harness or screenshot loop (`CLAUDE.md`, memory
+> `ui-options-switcher-light-testing`). (2) Never launch the app in the foreground while Daniel
+> works. (3) `.toolbar(removing: .title)` needs macOS 15; the app targets 14. (4) The bundle ID
+> stays `dev.danielslater.tabs` on purpose (keeps prefs and mic permission).
+>
+> **Pointers:** `CLAUDE.md`, `README.md`, `Sources/MacTabs/TabActions.swift`, `tests/ui.sh`.
+>
+> Next: superseded by the 2026-11-06 block above.
+
 > ## 🎸 RENAMED TO MACTABS + v0.2.1 (2026-10-09) — READ THIS FIRST
 >
 > **Done:** app, repo and folder are now **MacTabs**: GitHub `dan-slater/mactabs` (old URL
@@ -38,8 +102,6 @@
 > Homebrew cask (needs a stable download URL — the release asset is one), a GIF of the scroll
 > + voice in the README, notarisation (needs a paid Apple Developer account, R1 700/yr-ish).
 > Open from before: real-world PDF + phone scan to pilot `pdf`/`scan`; the live mic test.
-
-# MacTabs (was tabs-app) — handover log
 
 > ## 🎸 v0.2: ICON + VERSIONS + SYSTEM APPEARANCE (2026-10-07/08) — READ THIS FIRST
 >
