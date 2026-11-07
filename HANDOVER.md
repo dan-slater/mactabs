@@ -1,5 +1,51 @@
 # MacTabs (was tabs-app) — handover log
 
+> ## 🎮 GAME DIRECTION: CHARTS-FROM-VIDEO RESEARCH + PAPER DONE → NEXT A PLAYABLE DEMO (2026-11-07) — READ THIS FIRST
+>
+> **Goal:** turn MacTabs into an indie Guitar-Hero/Rocksmith-style game played on a real guitar
+> into the Mac mic. This session researched where charts (string, fret, time) come from and wrote
+> a paper; next session builds the first playable demo.
+>
+> **⚠️ UNCOMMITTED (master): `research/2026-11-07-charts-from-video/`** — scripts (`bench/`),
+> results tables (`bench/results/`), paper (`paper/paper.tex` + `paper.pdf`, tectonic), README.
+> Held back on purpose: Daniel has not yet said whether it goes in this PUBLIC repo or somewhere
+> private. Do NOT delete it. `bench/data/` (YouTube videos, GuiFiR frames/crops/audio, caches,
+> ~2 GB) and the 132 MB `results/e1_cv_rows.pkl` are gitignored (copyright / non-commercial data).
+> No app code changed; HEAD == origin `1c9bedf` before this block.
+>
+> **What came out of it (details in the paper):**
+> - Audio gives timing and pitch well; string/fret is the weak link. Hand position from video
+>   settles it: RTMW hand pose + plain neck box + **label-free per-clip fret self-calibration**
+>   → 94.8% string/fret vs 86.0% lowest-fret (song-level 5-fold CV, GuiFiR, 130 clips/35 songs).
+> - On-screen tab strips in YouTube lesson videos can be read directly (`bench/strip_ocr.py`,
+>   self-configuring; 7 channels, 87% digits right, 98% on clean styles, 41 ms timing).
+> - **The demo chart already exists:** `research/2026-11-07-charts-from-video/tab-ocr/elise_chart.json`
+>   = 107 Für Elise notes `{t, ts (snapped to audio onset), string, fret, midi}` from YouTube
+>   `9Ikb8QhVev0`.
+>
+> **Open decisions awaiting Daniel:** where to commit the research folder (public mactabs vs private).
+>
+> **Next actions (the playable demo):**
+> 1. **Live note detection test** (the untested risk): AVAudioEngine mic tap → pitch (YIN/McLeod on
+>    vDSP, or match energy at the *expected* note's fundamental + harmonics, which is more robust).
+>    Measure: right-note detection over a room with the laptop mic, and pluck→registered latency.
+>    Make it a hidden/test-mode feature so `make test` stays invisible (FIFO can inject notes).
+> 2. **Wait mode:** six-lane highway (lanes = strings, fret numbers on the notes) from
+>    `elise_chart.json`; it stops until the right pitch is heard. Judge by **pitch, not string**.
+> 3. Then hand to Daniel with the guitar. The same session covers the pending **v0.3.0 play
+>    test** (voice words over strumming) — see the 2026-11-06 block below.
+>
+> **Gotchas:**
+> - The mic is shared with voice commands (`v`), so turn voice off in play mode.
+> - Never launch the app in the foreground while Daniel works; UI asks = options behind the Design switcher (CLAUDE.md).
+> - zulzi GPU: `onnxruntime-gpu==1.22.0` + `onnxruntime.preload_dlls()` (1.23+ wants CUDA 13); MediaPipe can't run there (no libGLESv2) → run it on the Mac.
+> - Basic Pitch on the Mac: CoreML model path + `scipy<1.13` + `setuptools<70`.
+> - GuiFiR train labels disagree with audio (don't use them as ground truth).
+> - The venv used is in a session scratchpad and will vanish; recreate it with `uv` (numpy, opencv-python-headless, librosa, mediapipe, basic-pitch[coreml], pandas, matplotlib, pillow).
+>
+> **Pointers:** `research/2026-11-07-charts-from-video/README.md` (how to rebuild everything),
+> `paper/paper.pdf`, the memory note `mactabs.md`, `~/dan-hub/daniel-dev-skills/sessions/mactabs.md`.
+
 > ## 🎸 FINISH LINE PLANNED: PLAY TEST → v0.3.0 → LAUNCH DRAFTS (2026-11-06) — READ THIS FIRST
 >
 > **Goal:** finish MacTabs: play test with the guitar, fix what it finds plus the new-user
