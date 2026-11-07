@@ -8,12 +8,29 @@ import SwiftUI
 // Settled 2026-10-17: icon row right-aligned above the name; source link only in that row;
 // chord lines teal.
 
+/// Play mode: notes falling down six lanes, or sliding left along six tab lines.
+enum HighwayLayout: String, CaseIterable, Identifiable {
+    case lanes = "Falling lanes", strip = "Tab strip"
+    var id: String { rawValue }
+}
+
+/// Play mode: what each note shows.
+enum NoteLabel: String, CaseIterable, Identifiable {
+    case fret = "Fret", fretName = "Fret + note"
+    var id: String { rawValue }
+}
+
 struct DesignPanel: View {
-    static let hasForks = false
+    static let hasForks = true
+    @AppStorage("design.highway") private var highway: HighwayLayout = .lanes
+    @AppStorage("design.noteLabel") private var noteLabel: NoteLabel = .fret
 
     var body: some View {
         Form {
-            Text("No open design choices.").foregroundStyle(.secondary)
+            Section("Play mode") {
+                row("Highway", $highway)
+                row("Notes show", $noteLabel)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)

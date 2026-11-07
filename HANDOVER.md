@@ -1,5 +1,49 @@
 # MacTabs (was tabs-app) — handover log
 
+> ## 🎮 PLAYABLE DEMO BUILT: WAIT MODE + PITCH JUDGE, READY FOR THE GUITAR (2026-11-07, evening) — READ THIS FIRST
+>
+> **Goal:** first playable demo of the guitar game: Für Elise in "wait mode", heard through the Mac mic.
+>
+> **UNCOMMITTED:** `research/2026-11-07-charts-from-video/` (still held back on purpose; public vs
+> private undecided). Everything else is committed and pushed.
+>
+> **What shipped (unreleased, after v0.2.1):**
+> - `Sources/NoteJudge/` (library): pitch judge that answers "was the EXPECTED note just struck?" per
+>   11 ms hop. It checks harmonic energy per candidate note (zero-padded FFT), an onset rise, contrast vs ±1
+>   semitone on resolved harmonics only, or on the *new* energy alone when the last note still rings next
+>   door (E–D# in Für Elise). It also needs harmonic 1 or 2 present (kills ghost notes below) and odd harmonics
+>   present (kills "octave too low"), and rejects upper partials of a louder lower note. Also `Chart` (JSON → steps).
+> - `Sources/pitchbench/`: `eval <audio> <chart> [-v|-q] [key=value] [--align <source>]`, `synth <chart> <wav> [rate] [offset]`.
+> - Play mode (`Game.swift`, `Listener.swift`): `g` / gamecontroller icon / **Play** menu opens
+>   `Artist - Title.chart.json` from the tabs folder. It stops at each note until the pitch is heard (0.6 s lookahead
+>   for early plucks), with `space` pause, `↑↓` speed, `r` restart, `esc` leave. Voice turns off on start (shared mic).
+>   Every session writes a JSONL log to `~/Library/Logs/MacTabs/play-*.jsonl` (plucks, hits, latency per hit).
+> - Design forks (`hasForks = true` again): **Highway** = Falling lanes (default) | Tab strip; **Notes show** =
+>   Fret (default) | Fret + note.
+> - FIFO words: `play <chart>` (no mic), `note <midi…>`, `feed <wav>` (real-time into the judge), `game`
+>   (state JSON), `pace <x>`, `leave`, `set <defaults key> <value>`, `record <secs> <path>` (mic to file).
+> - `make test` 34/34 (deterministic: seeded synth). `~/Tabs/Beethoven - Für Elise.chart.json` copied
+>   from the research chart (private, not in git); fixture `tests/fixtures/elise-opening.chart.json` is hand-written PD.
+>
+> **Measured offline (`pitchbench eval` on the real YouTube recording, 89 steps):** right note on the first
+> pluck 84.3%, analysis latency median 40 ms / p90 64 ms (plus ~10–20 ms buffer + device input latency
+> live). Semitone false fires 7% (inflated by the chart's ±0.1 s timing), other-pitch fires 11%. The
+> synthetic take: 72% hit, 0.5% semitone false fires. Misses cluster on low bass notes inside chords.
+>
+> **NOT measured yet (the room test):** Daniel declined the speaker→mic loop tonight. The real numbers come
+> from his guitar session: read the play log (hits / plucks = right-note rate; `latency_ms` per hit).
+> To score a room recording: FIFO `record 70 /path.wav`, then `pitchbench eval /path.wav <chart> --align <source.wav>`.
+>
+> **Next: Daniel with the guitar (same session as the v0.3.0 play test):**
+> 1. Quit and reopen MacTabs (or `make reload`), press `g` on any song, or **Play → Beethoven - Für Elise**.
+>    Allow the mic if asked. Play; try ⌘, for the two layouts.
+> 2. Read `~/Library/Logs/MacTabs/play-*.jsonl`, then tune `NoteJudge.Config` (`pitchbench` key=value sweeps).
+> 3. Then the 2026-11-06 list (voice over strumming, first-run sample, import, folder setting) → v0.3.0.
+>
+> **Gotchas:** the offscreen `shot` render shows the header/sidebar white (render artefact, not the app).
+> The research chart's times come from the video, so its gaps are uneven; wait mode hides that. The judge
+> is lenient on purpose (a chord passes when each note's harmonics show, octave-doubled bass included).
+
 > ## 🎮 GAME DIRECTION: CHARTS-FROM-VIDEO RESEARCH + PAPER DONE → NEXT A PLAYABLE DEMO (2026-11-07) — READ THIS FIRST
 >
 > **Goal:** turn MacTabs into an indie Guitar-Hero/Rocksmith-style game played on a real guitar

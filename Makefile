@@ -12,7 +12,7 @@ REL    := .build/release
 
 all: $(BUNDLE)
 
-$(BUNDLE): $(wildcard Sources/MacTabs/*.swift) Package.swift res/Info.plist
+$(BUNDLE): $(wildcard Sources/*/*.swift) Package.swift res/Info.plist
 	swift build -c release
 	rm -rf $(BUNDLE)
 	mkdir -p $(BUNDLE)/Contents/MacOS $(BUNDLE)/Contents/Resources

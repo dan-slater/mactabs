@@ -158,6 +158,40 @@ check "next wraps back to the first version" "s['version']=='sample'"
 rm "$LIB/Traditional - House of the Rising Sun (UG tabs 1234).tab"; sleep 1.2
 check "deleting a version keeps the song open" "s['tab']=='House of the Rising Sun' and s['version']=='sample'"
 
+echo "== play mode (wait mode, notes injected — no mic)"
+gstate(){ : > "$OUT"; say game; sleep 0.3; cat "$OUT"; }
+gcheck(){ local s; s=$(gstate)
+  if python3 -c "import json,sys; s=json.loads(sys.stdin.readline()); sys.exit(0 if ($2) else 1)" <<<"$s"; then ok "$1"; else bad "$1  ← $s"; fi
+}
+CH="$PWD/tests/fixtures/elise-opening.chart.json"
+say "play $CH"; sleep 0.5
+gcheck "chart opens, mic stays off in tests" "s['playing'] and s['steps']==9 and s['step']==0 and not s['mic']"
+sleep 2.2
+gcheck "the highway stops at the first note"  "s['waiting'] and abs(s['songTime']-1.0)<0.02"
+say "note 64"; sleep 0.2
+gcheck "the right pitch (E4) moves it on"     "s['step']==1"
+say "note 60"; sleep 0.2
+gcheck "a wrong pitch does not"               "s['step']==1"
+say "note 63"; say "note 64"; say "note 63"; say "note 64"; say "note 59"; say "note 62"; say "note 60"; sleep 0.3
+gcheck "seven more right notes"               "s['step']==8 and not s['done']"
+say "note 57"; sleep 0.2
+gcheck "a chord waits for all its notes"      "s['step']==8"
+say "note 45"; sleep 0.2
+gcheck "…and then the chart is done"          "s['done'] and s['hits']==9"
+shot 07-play
+
+echo "== play mode (a plucked recording through the real pitch judge)"
+BENCH=.build/release/pitchbench
+if [ -x "$BENCH" ] && "$BENCH" synth "$CH" "$WORK/opening.wav" 48000 1.15 >/dev/null; then
+  say "play $CH"; sleep 0.2; say "feed $WORK/opening.wav"; sleep 8.5
+  gcheck "the judge hears every note of the recording" "s['done'] and s['hits']==9"
+  gcheck "latency is measured and sane (<250 ms)"      "len(s['latencies'])==9 and max(s['latencies'])<250"
+  echo "  latencies (ms): $(gstate | field latencies)"
+  grep -q '"event":"done"' "$FIFO.play.jsonl" && ok "session log written" || bad "no session log"
+else bad "pitchbench synth failed"; fi
+say leave; sleep 0.3
+gcheck "esc/leave returns to the tab"         "not s['playing']"
+
 echo
 echo "passed $pass, failed $fail — shots in $SHOTS/"
 [ $fail -eq 0 ]

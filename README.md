@@ -49,6 +49,7 @@ voice, full screen, and export (save as PDF, share the file, copy the text, show
 | c | show / hide the chord panel |
 | n | next version of this song (when there is more than one) |
 | v | voice commands on / off |
+| g | play mode for this song's chart (see below) |
 | ⌘, | design options (also the sliders icon in the toolbar) |
 
 ## Voice
@@ -57,6 +58,28 @@ voice, full screen, and export (save as PDF, share the file, copy the text, show
 microphone and speech permissions). Words that act: **faster**, **slower**, **stop** (pause,
 wait), **go** (start, play, scroll), **top** (restart). Nothing leaves the Mac. Recognition
 sessions are capped at about a minute, so the app rolls them over every 50 s while listening.
+
+## Play mode (wait mode, early demo)
+
+Put a chart next to your tabs as `Artist - Title.chart.json` and press `g` (or click the game
+controller in the icon row, or pick it from the **Play** menu). Six lanes scroll the notes
+towards a hit line, fret numbers on the notes; the highway stops at each note until you play
+that pitch into the Mac's microphone. It judges **pitch, not string**: any string and fret that
+sounds the note counts. Voice commands switch off while you play (they share the mic).
+
+Keys in play mode: `space` pause, `↑ ↓` speed, `r` restart, `esc` leave. The Design panel (⌘,)
+switches between falling lanes and a tab strip.
+
+A chart is JSON: `{"title": …, "artist": …, "notes": [{"t": 3.36, "string": 1, "fret": 0}]}`,
+with string 1 the high e. `midi` is filled in from standard tuning when missing.
+
+How notes are heard (`Sources/NoteJudge`): no open-ended pitch tracking. Every 11 ms the judge
+measures the energy at each candidate note's harmonics and calls the *expected* note struck
+when that energy jumps, stands clear of the semitones either side (in the new energy alone when
+the last note is still ringing next door), and is not just an upper partial of a lower note.
+`pitchbench eval <audio> <chart>` scores it offline against a recording; on a real classical
+guitar recording of Für Elise it hears 84% of the chart's notes on the first pluck, about 40 ms
+after the onset. Each play session writes a log to `~/Library/Logs/MacTabs/`.
 
 ## The file format
 
@@ -134,6 +157,11 @@ make test-full   # visible, + the real-keystroke leg (steals focus, leave the Ma
   `Voice.apply` the recogniser calls, so the voice path is tested without a microphone;
   `state` writes a JSON line (running, speed, scroll y, wrapped lines, …) to `$FIFO.out`.
 - through real keystrokes with System Events (`FULL=1`; needs Accessibility for the terminal).
+
+Play mode is tested the same way: `play <chart>` opens a chart without the mic, `note 64`
+injects a heard pitch, `game` writes the play state, and `feed <wav>` streams a recording into
+the real pitch judge in real time (the harness renders a plucked-string take of a public-domain
+chart with `pitchbench synth` and checks that every note is heard).
 
 It also checks that the speed round-trips into the file's frontmatter, that the folder watch
 picks up a new file, that versions cycle, and that no tab line wraps. Screenshots of the live

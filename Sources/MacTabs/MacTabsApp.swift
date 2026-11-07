@@ -1,11 +1,13 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 
 @main
 struct MacTabsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var library = Library()
     @StateObject private var player = Player()
+    @StateObject private var game = Game()
 
     init() {
         // One window that quits the app when closed, so restoring windows buys nothing, and an
@@ -15,11 +17,21 @@ struct MacTabsApp: App {
 
     var body: some Scene {
         WindowGroup("MacTabs") {
-            ContentView(library: library, player: player)
+            ContentView(library: library, player: player, game: game)
                 .frame(minWidth: 800, minHeight: 500)
         }
         .defaultSize(width: 1200, height: 800)
-        .commands { CommandGroup(replacing: .newItem) {} }
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandMenu("Play") {
+                if library.charts.isEmpty { Text("No charts: put Artist - Title.chart.json in the tabs folder") }
+                ForEach(library.charts, id: \.self) { url in
+                    Button(Library.chartName(url)) { game.start(url, mic: !AppDelegate.testing) }
+                }
+                Divider()
+                Button("Leave play mode") { game.stop() }.disabled(game.chart == nil)
+            }
+        }
         Settings { DesignPanel() }
     }
 }
@@ -27,6 +39,8 @@ struct MacTabsApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `TABS_TEST_HIDDEN=1` (the fast test run): no Dock icon, no focus, an invisible window.
     static let hidden = ProcessInfo.processInfo.environment["TABS_TEST_HIDDEN"] != nil
+    /// Driven by the test FIFO: play mode starts without the mic (notes come in through the FIFO).
+    static let testing = ProcessInfo.processInfo.environment["TABS_TEST_FIFO"] != nil
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if Self.hidden { NSApp.setActivationPolicy(.accessory); return }
@@ -39,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct ContentView: View {
     @ObservedObject var library: Library
     @ObservedObject var player: Player
+    @ObservedObject var game: Game
     @StateObject private var voice: Voice
     @State private var selection: String?          // Song.id
     @State private var picked: [String: URL] = [:]  // which version of each song was last open
@@ -46,9 +61,10 @@ struct ContentView: View {
     @State private var monitor: Any?
     @State private var showDesign = false
 
-    init(library: Library, player: Player) {
+    init(library: Library, player: Player, game: Game) {
         self.library = library
         self.player = player
+        self.game = game
         _voice = StateObject(wrappedValue: Voice(player: player))
     }
 
@@ -112,12 +128,15 @@ struct ContentView: View {
           .searchable(text: $query, placement: .sidebar, prompt: "Filter")
           .navigationSplitViewColumnWidth(min: 180, ideal: 240)
         } detail: {
-            if let tab = player.tab {
+            if game.chart != nil {
+                PlayView(game: game)
+            } else if let tab = player.tab {
               VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Spacer()
-                            TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion)
+                            TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion,
+                                       chart: library.chart(for: tab), play: { play() })
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(tab.title).font(.title2.weight(.semibold)).lineLimit(1)
@@ -144,7 +163,7 @@ struct ContentView: View {
                 }
             } else {
                 ContentUnavailableView("No tab open", systemImage: "guitars",
-                    description: Text("Drop .tab files into \(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) and pick one.\n\nspace scroll · ↑↓ speed · [ ] sections · + − size · t top · c chords · n next version · v voice"))
+                    description: Text("Drop .tab files into \(Library.dir.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) and pick one.\n\nspace scroll · ↑↓ speed · [ ] sections · + − size · t top · c chords · n next version · v voice · g play"))
             }
         }
         .onChange(of: selection) { _, id in
@@ -162,6 +181,8 @@ struct ContentView: View {
             if selection == nil, let first = Song.group(tabs).first { selection = first.id }
         }
         .onAppear {
+            // Voice commands and play mode share the mic: playing turns voice off.
+            game.beforeStart = { [voice] in if voice.listening { voice.stop() } }
             installKeys()
             if selection == nil, let first = songs.first { selection = first.id }
             installTestHook()
@@ -199,6 +220,17 @@ struct ContentView: View {
             // Let the search field keep its keystrokes.
             if let fr = NSApp.keyWindow?.firstResponder as? NSTextView, fr.isFieldEditor { return event }
             if event.modifierFlags.contains(.command) { return event }
+            if game.chart != nil {
+                switch event.keyCode {
+                case 53: game.stop()                                    // esc
+                case 49: game.togglePause()                             // space
+                case 126: game.faster()
+                case 125: game.slower()
+                default:
+                    if event.charactersIgnoringModifiers == "r" { game.restart() } else { return event }
+                }
+                return nil
+            }
             switch event.keyCode {
             case 49: player.toggle()                                    // space
             case 126: player.faster()                                   // ↑
@@ -213,6 +245,7 @@ struct ContentView: View {
                 case "c": player.showChords.toggle()
                 case "n": cycleVersion()
                 case "v": voice.toggle()
+                case "g": play()
                 default: return event
                 }
             }
@@ -259,6 +292,37 @@ struct ContentView: View {
                             }
                         } else if w.hasPrefix("pdf "), let tab = player.tab {
                             PDFExport.write(tab, to: URL(fileURLWithPath: String(w.dropFirst(4))))
+                        } else if w.hasPrefix("play ") {
+                            game.start(URL(fileURLWithPath: String(w.dropFirst(5))), mic: false)
+                        } else if w.hasPrefix("note ") {
+                            game.inject(w.dropFirst(5).split(separator: " ").compactMap { Int($0) })
+                        } else if w.hasPrefix("feed ") {
+                            game.feed(URL(fileURLWithPath: String(w.dropFirst(5))))
+                        } else if w.hasPrefix("pace ") {
+                            game.speed = Double(w.dropFirst(5)) ?? game.speed
+                        } else if w.hasPrefix("set ") {
+                            // "set design.highway Tab strip": flip a Design fork from the harness.
+                            let kv = w.dropFirst(4).split(separator: " ", maxSplits: 1).map(String.init)
+                            if kv.count == 2 { UserDefaults.standard.set(kv[1], forKey: kv[0]) }
+                        } else if w.hasPrefix("record ") {
+                            // "record <seconds> <path>": the mic to a file, then a line in .out.
+                            let p = w.dropFirst(7).split(separator: " ", maxSplits: 1).map(String.init)
+                            if p.count == 2, let secs = Double(p[0]) {
+                                AVCaptureDevice.requestAccess(for: .audio) { ok in
+                                    DispatchQueue.main.async {
+                                        guard ok else { try? "mic denied\n".write(toFile: path + ".out", atomically: true, encoding: .utf8); return }
+                                        Listener.record(to: URL(fileURLWithPath: p[1]), seconds: secs) { msg in
+                                            try? (msg + "\n").write(toFile: path + ".out", atomically: true, encoding: .utf8)
+                                        }
+                                    }
+                                }
+                            }
+                        } else if w == "leave" { game.stop()
+                        } else if w == "voice" { voice.toggle()
+                        } else if w == "game" {
+                            let s = game.stateJSON() + "\n"
+                            if let out = FileHandle(forWritingAtPath: path + ".out") { out.seekToEndOfFile(); out.write(Data(s.utf8)) }
+                            else { try? s.write(toFile: path + ".out", atomically: true, encoding: .utf8) }
                         } else if w == "next" { cycleVersion()
                         } else if w == "chords" { player.showChords.toggle()
                         } else { voice.apply(w) }
@@ -267,6 +331,14 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    /// Play the open song's chart, else the first chart in the folder.
+    func play() {
+        guard let url = library.chart(for: player.tab) ?? library.charts.first else {
+            player.flash("no chart: put Artist - Title.chart.json in the tabs folder"); return
+        }
+        game.start(url, mic: !AppDelegate.testing)
     }
 
     func currentLine() -> Int {

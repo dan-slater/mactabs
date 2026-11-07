@@ -1,0 +1,17 @@
+{
+"title": "Für Elise (opening)",
+"artist": "Beethoven",
+"note": "Public domain (Beethoven, 1810). Hand-written test chart: string 1 = high e.",
+"notes": [
+{"t": 1.0, "string": 1, "fret": 0},
+{"t": 1.5, "string": 2, "fret": 4},
+{"t": 2.0, "string": 1, "fret": 0},
+{"t": 2.5, "string": 2, "fret": 4},
+{"t": 3.0, "string": 1, "fret": 0},
+{"t": 3.5, "string": 2, "fret": 0},
+{"t": 4.0, "string": 2, "fret": 3},
+{"t": 4.5, "string": 2, "fret": 1},
+{"t": 5.0, "string": 3, "fret": 2},
+{"t": 5.0, "string": 5, "fret": 0}
+]
+}

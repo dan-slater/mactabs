@@ -14,7 +14,7 @@
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Voice commands: say "faster", "slower", "stop" or "go" while playing.</string>
+    <string>Voice commands ("faster", "slower", "stop", "go") and play mode, which listens for the notes you play.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Recognises the scroll commands on-device.</string>
     <key>CFBundleDocumentTypes</key>

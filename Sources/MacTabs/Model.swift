@@ -110,6 +110,8 @@ final class Library: ObservableObject {
     }()
 
     @Published private(set) var tabs: [TabFile] = []
+    /// Play-mode charts in the same folder: `Artist - Title.chart.json`.
+    @Published private(set) var charts: [URL] = []
     private var source: DispatchSourceFileSystemObject?
     private var pending: DispatchWorkItem?
 
@@ -142,5 +144,17 @@ final class Library: ObservableObject {
             .compactMap(TabFile.load)
             .sorted { ($0.artist + $0.title).localizedCaseInsensitiveCompare($1.artist + $1.title) == .orderedAscending }
         if fresh != tabs { tabs = fresh }
+        let ch = urls.filter { $0.lastPathComponent.lowercased().hasSuffix(".chart.json") }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        if ch != charts { charts = ch }
+    }
+
+    static func chartName(_ url: URL) -> String { String(url.lastPathComponent.dropLast(".chart.json".count)) }
+
+    /// The chart for a song, by file name: "Artist - Title" or just "Title".
+    func chart(for tab: TabFile?) -> URL? {
+        guard let tab else { return nil }
+        let keys = [tab.artist.isEmpty ? tab.title : "\(tab.artist) - \(tab.title)", tab.title].map { $0.lowercased() }
+        return charts.first { keys.contains(Self.chartName($0).lowercased()) }
     }
 }

@@ -11,8 +11,12 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "MacTabs",
-            dependencies: ["Fretboard"],
+            dependencies: ["Fretboard", "NoteJudge"],
             path: "Sources/MacTabs"
         ),
+        // Hears whether an expected note was played (pure DSP, shared by the app and the bench).
+        .target(name: "NoteJudge", path: "Sources/NoteJudge"),
+        // Offline scoring of NoteJudge against a chart + recording; also renders test audio.
+        .executableTarget(name: "pitchbench", dependencies: ["NoteJudge"], path: "Sources/pitchbench"),
     ]
 )
