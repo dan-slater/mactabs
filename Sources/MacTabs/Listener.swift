@@ -17,7 +17,7 @@ final class Listener {
     /// What the judge hears right now (main queue, ~15 Hz): loudest pitched note and input level.
     var onMeter: ((Int?, Float) -> Void)?
     /// Every pluck the judge picks out while waiting (main queue), for the session log.
-    var onStruck: (([Int], Int) -> Void)?
+    var onStruck: (([Int], Int, Float) -> Void)?
 
     private let q = DispatchQueue(label: "mactabs.listener", qos: .userInteractive)
     private var judge: NoteJudge?
@@ -145,8 +145,8 @@ final class Listener {
         let struck = judge.struckNotes(since: since)
         if !struck.isEmpty && h - lastPluckHop > Int(0.09 * judge.fs) / judge.hopSize {
             lastPluckHop = h
-            let s = step
-            DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s) }
+            let s = step, rms = judge.rmsDB
+            DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms) }
         }
         guard step >= 0, !expected.isEmpty else { return }
         for p in expected.subtracting(got) where judge.struck(p, since: since, allowing: expected) { got.insert(p) }

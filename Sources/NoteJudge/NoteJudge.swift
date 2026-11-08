@@ -20,6 +20,8 @@ public final class NoteJudge {
         public var riseSec = 0.12          // how far back that minimum looks
         public var contrastDB: Float = 5   // above both neighbouring semitones
         public var gateDB: Float = 22      // above the noise floor
+        public var shareDB: Float = 10     // the note's harmonics within this of the whole input (room hiss is spread thin)
+        public var minRMSDB: Float = -60   // input quieter than this is never a note (dBFS)
         public var oddDB: Float = -14      // odd harmonics vs even ones (rejects "an octave too low")
         public var partialDB: Float = 4    // a lower note this close in level explains this one away
         public var diffContrastDB: Float = 11  // …and clear of the neighbours in the new energy by this
@@ -237,7 +239,7 @@ public final class NoteJudge {
         let back = min(Int(config.riseSec * fs / Double(hopSize)), hop, depth - 1)
         var lo = Float.infinity
         for a in 1...max(1, back) { lo = min(lo, at(k, ago: a)) }
-        return ["gate": at(k) - floorDB, "rise": at(k) - lo, "contrast": contrast(k),
+        return ["gate": at(k) - floorDB, "share": at(k) - rmsDB, "rise": at(k) - lo, "contrast": contrast(k),
                 "low": lowHist[slot][k], "odd": oddHist[slot][k] - evenHist[slot][k]]
     }
 
@@ -251,7 +253,7 @@ public final class NoteJudge {
         guard let k = idx(midi) else { return false }
         let c = config
         let now = at(k)
-        guard now >= floorDB + c.gateDB else { return false }
+        guard now >= floorDB + c.gateDB, rmsDB >= c.minRMSDB, now >= rmsDB - c.shareDB else { return false }
         // Onset: a jump over the note's own recent minimum.
         let back = Int(c.riseSec * fs / Double(hopSize))
         let avail = min(back, hop - since, depth - 1)

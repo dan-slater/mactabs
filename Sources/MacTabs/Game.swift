@@ -29,6 +29,7 @@ final class Game: ObservableObject {
     private var injected: Set<Int> = []
     private var log: FileHandle?
     private var startWall = 0.0
+    private var lastLevelLog = 0.0
 
     /// A hit is taken this far before its note reaches the line; earlier plucks re-arm the judge.
     static let lookahead = 0.6
@@ -42,13 +43,15 @@ final class Game: ObservableObject {
         listener.onHit = { [weak self] hit in self?.listened(hit) }
         listener.onMeter = { [weak self] note, level in
             guard let self else { return }
+            let now = Listener.now()
+            if self.chart != nil, now - self.lastLevelLog > 1 { self.lastLevelLog = now; self.write(["event": "level", "rms_db": Int(level)]) }
             if self.heard != note { self.heard = note }
             self.level = level
         }
-        listener.onStruck = { [weak self] notes, step in
+        listener.onStruck = { [weak self] notes, step, rms in
             guard let self, self.chart != nil, !self.done else { return }
             self.plucks += 1
-            self.write(["event": "pluck", "notes": notes, "step": step])
+            self.write(["event": "pluck", "notes": notes, "step": step, "rms_db": Int(rms)])
         }
     }
 
@@ -70,6 +73,7 @@ final class Game: ObservableObject {
         stop()
         self.chart = chart
         message = ""
+        startWall = Listener.now()
         openLog(chart)
         restart()
         if mic { startMic() }
