@@ -15,7 +15,8 @@ draw of those, so the bench is the same every run.
 
   tools/guitarset-bench.py prepare [--variant laptop|clean] [--limit N]
   tools/guitarset-bench.py run [key=value …]            pitchbench suite on tune + hold
-  tools/guitarset-bench.py tune [--trials N]             coordinate search over NoteJudge.Config
+  tools/guitarset-bench.py tune [--rounds N] [--hybrid] [key=value …]   coordinate search from a start
+                                                        (--hybrid: Hearing, NoteJudge + Basic Pitch)
 
 Data lives in ~/Library/Caches/MacTabs/guitarset (never in the repo):
   annotation/*.jams, mic/*_mic.wav       the download (unzipped)
@@ -23,7 +24,7 @@ Data lives in ~/Library/Caches/MacTabs/guitarset (never in the repo):
   <variant>/<take>.wav                   48 kHz mono, degraded
   <variant>-{tune,hold,all}.tsv          pitchbench manifests; players 00-03 tune, 04-05 hold out
 """
-import argparse, hashlib, json, subprocess, sys
+import argparse, hashlib, json, os, subprocess, sys
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,7 @@ from scipy import signal
 
 ROOT = Path.home() / "Library/Caches/MacTabs/guitarset"
 REPO = Path(__file__).resolve().parent.parent
-BENCH = REPO / ".build/release/pitchbench"
+BENCH = Path(os.environ.get('PITCHBENCH', REPO / '.build/release/pitchbench'))
 OPEN = [40, 45, 50, 55, 59, 64]          # GuitarSet data_source 0 = low E … 5 = high e
 FS = 48000
 STRUM = 0.06                             # notes starting within this of a step's first note join it
@@ -131,9 +132,12 @@ def prepare(a):
         (ROOT / f"{a.variant}-{split}.tsv").write_text("".join(r + "\n" for p, r in rows if keep is None or p in keep))
 
 
+EXTRA: list[str] = []      # --hybrid: judge with the streamed Basic Pitch posteriors too (pitchbench mode=1)
+
+
 def suite(manifest: Path, kv: list[str]) -> dict:
     j = ROOT / f".suite-{manifest.stem}.json"
-    subprocess.run([str(BENCH), "suite", str(manifest), *kv, "--json", str(j)], check=True, capture_output=True)
+    subprocess.run([str(BENCH), "suite", str(manifest), *EXTRA, *kv, "--json", str(j)], check=True, capture_output=True)
     return json.loads(j.read_text())
 
 
@@ -168,6 +172,15 @@ SPACE = {
     "diffcontrast": [6, 8, 11, 14], "buried": [3, 6, 9, 12], "difflag": [0.05, 0.08, 0.12],
     "chordcontrast": [-2, -1, 0, 1, 2, 3], "chordlow": [8, 11, 14, 18, 22], "low": [5, 8, 11, 14],
     "lowest": [0, 38, 40], "repluckrise": [1, 2, 3, 5], "noiserise": [1, 3, 6],
+    "chordrepluck": [2, 4, 6, 8], "chordnotes": [2, 3], "skipmade": [0, 1],
+}
+# The hybrid (Hearing): Basic Pitch's thresholds and frame age, and the NoteJudge tests it still
+# uses (gate, share, onset). In the app `onlow` is NoteModel.Config.onset and `note` .note.
+SPACE_HYBRID = {
+    "note": [0.2, 0.25, 0.3, 0.35, 0.4], "onlow": [0.3, 0.35, 0.4, 0.5, 0.6], "age": [2, 3, 4, 5],
+    "slack": [-0.03, 0, 0.02], "rise": [4, 5, 6, 7, 8, 10], "risesec": [0.08, 0.12, 0.16, 0.2],
+    "gate": [16, 19, 22, 25], "share": [6, 8, 10, 12, 15], "minrms": [-65, -60, -55],
+    "repluck": [1, 2, 3, 4], "chordrepluck": [2, 4, 6, 8], "repluckrise": [1, 2, 3, 5],
 }
 
 
@@ -178,7 +191,7 @@ def tune(a):
     print(f"start {best:.4f} {cur}", flush=True)
     for rnd in range(a.rounds):
         improved = False
-        for key, vals in SPACE.items():
+        for key, vals in (SPACE_HYBRID if a.hybrid else SPACE).items():
             for v in vals:
                 trial = {**cur, key: str(v)}
                 if trial == cur:
@@ -202,5 +215,8 @@ if __name__ == "__main__":
     ap.add_argument("--variant", default="laptop")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--rounds", type=int, default=3)
+    ap.add_argument("--hybrid", action="store_true", help="tune Hearing (needs bp-<variant>/ from basicpitch-bench.py)")
     a = ap.parse_args()
+    if a.hybrid:
+        EXTRA[:] = ["--post", str(ROOT / f"bp-{a.variant}"), "mode=1"]
     {"prepare": prepare, "run": run, "tune": tune}[a.cmd](a)

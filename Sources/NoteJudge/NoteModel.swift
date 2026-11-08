@@ -18,9 +18,9 @@ public final class NoteModel {
     public struct Config {
         public var stride = 2          // frames between model runs (23 ms)
         public var keep = 16           // newest frames kept per run
-        public var age = 3             // a frame counts once this many frames follow it
+        public var age = 5             // a frame counts once this many frames (58 ms) follow it
         public var onset: Float = 0.4  // onset posterior for "a new pluck of this pitch"
-        public var note: Float = 0.3   // note posterior for "this pitch sounds"
+        public var note: Float = 0.25  // note posterior for "this pitch sounds" (tuned on GuitarSet with Hearing)
         public var slack = -0.03       // a frame counts for a step this long after (or before) it was armed
         public var cpuOnly = false     // true: CPU only (about 14 ms a run, ~0.6 of a core live); default lets CoreML pick (GPU/ANE, ~3 ms)
         public init() {}

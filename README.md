@@ -75,13 +75,48 @@ switches between falling lanes and a tab strip.
 A chart is JSON: `{"title": …, "artist": …, "notes": [{"t": 3.36, "string": 1, "fret": 0}]}`,
 with string 1 the high e. `midi` is filled in from standard tuning when missing.
 
-How notes are heard (`Sources/NoteJudge`): no open-ended pitch tracking. Every 11 ms the judge
-measures the energy at each candidate note's harmonics and calls the *expected* note struck
-when that energy jumps, stands clear of the semitones either side (in the new energy alone when
-the last note is still ringing next door), and is not just an upper partial of a lower note.
-`pitchbench eval <audio> <chart>` scores it offline against a recording; on a real classical
-guitar recording of Für Elise it hears 84% of the chart's notes on the first pluck, about 40 ms
-after the onset. Each play session writes a log to `~/Library/Logs/MacTabs/`.
+How notes are heard (`Sources/NoteJudge`): no open-ended pitch tracking; the game only asks
+"was the *expected* note just struck?". Two listeners answer together (`Hearing`):
+
+- **NoteJudge** (DSP): every 11 ms it measures the energy at each candidate note's harmonics
+  and calls the note struck when that energy jumps, stands clear of the semitones either side,
+  and is not just an upper partial of a lower note.
+- **Basic Pitch** (Spotify's small note-transcription model, Apache-2.0, bundled as CoreML,
+  272 KB): a 2 s window ending now, run every 23 ms on the GPU / Neural Engine. Its *note*
+  posterior says which pitches sound and rarely mistakes a fret or an overtone.
+
+A note counts when Basic Pitch hears it sounding and a new pluck shows (Basic Pitch's onset
+posterior, or NoteJudge's onset test, which catches re-strums of a ringing chord); a single
+note must also not be just the overtone of a lower note that was plucked.
+`defaults write dev.danielslater.tabs play.ear judge` listens with NoteJudge alone.
+
+Measured on a laptop-mic simulation of GuitarSet (360 takes of acoustic guitar with
+per-string annotations, played through a bass roll-off, a small room and mains hum; see
+`tools/guitarset-bench.py`), on players the tuning never saw:
+
+| first pluck heard | single notes | two-note steps | chords | wrong fret accepted | overtone accepted |
+| --- | --- | --- | --- | --- | --- |
+| NoteJudge + Basic Pitch (default) | 94% | 65% | 74% | 0–2.5% | 0.4–4% |
+| NoteJudge alone | 87% | 33% | 39% | 0.2–4% | 0.5–6% |
+
+Median latency is 47 ms for a single note and 77 ms for a chord (analysis only; add the audio
+buffer). Solos are heard 98% of the time; fast funk comping is the hardest. On a real recording
+of Für Elise it hears every note. Each play session
+writes a log to `~/Library/Logs/MacTabs/`.
+
+### The bench
+
+```bash
+tools/guitarset-bench.py prepare        # GuitarSet (CC BY 4.0) into ~/Library/Caches/MacTabs/guitarset
+tools/basicpitch-bench.py ~/Library/Caches/MacTabs/guitarset/laptop-all.tsv ~/Library/Caches/MacTabs/guitarset/bp-laptop
+.build/release/pitchbench suite ~/Library/Caches/MacTabs/guitarset/laptop-hold.tsv --live   # the app's Hearing
+.build/release/pitchbench suite ~/Library/Caches/MacTabs/guitarset/laptop-hold.tsv --why    # NoteJudge, why notes are missed
+tools/guitarset-bench.py tune [--hybrid]                                                    # coordinate search
+```
+
+`suite` replays each take through the game's own wait-mode judging and also asks for decoy
+steps (the same notes ±1 semitone and ±1 octave) to count false accepts. Players 00–03 tune,
+04–05 are held out. `pitchbench eval <audio> <chart>` scores a single recording.
 
 ## The file format
 

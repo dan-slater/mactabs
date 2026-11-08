@@ -41,6 +41,14 @@ public final class NoteJudge {
         public var chordVetoOff = 99           // steps with this many notes skip the overtone veto (the player strums a shape)
         public var skipMade = false            // contrast ignores a neighbour that another chord note's harmonic makes
         public init() {}
+
+        /// The judge's part in `Hearing` (with Basic Pitch saying which pitches sound, NoteJudge only
+        /// has to see the pluck): tuned on the GuitarSet laptop-mic bench, players 00–03, 2026-11-08.
+        public static var hybrid: Config {
+            var c = Config()
+            c.riseDB = 10; c.riseSec = 0.2; c.shareDB = 6; c.repluckRiseDB = 5
+            return c
+        }
     }
 
     public let fs: Double
@@ -353,24 +361,35 @@ public final class NoteJudge {
         }
         // Its bottom harmonics sound and its odd ones too: not a ghost, not an octave too low.
         guard pitched(k, chord: chord) else { return .pitched }
-        // Not an upper partial (octave, twelfth, two octaves) of a lower note that was just plucked.
-        // A plucked low note also sounds harmonics this note cannot explain (G#2 rings at G#3,
-        // which D#4 never makes); an open string ringing along, or the body's hum, does not.
-        // In a chord, the lower note's harmonics that the chord's own notes (or their harmonics) make
-        // are not its own: C3 E3 G3 is not a C2.
-        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] where allowing.count < c.chordVetoOff {
+        // Not an upper partial of a lower note that was just plucked.
+        if allowing.count < c.chordVetoOff && overtone(midi, since: since, allowing: allowing) { return .overtone }
+        return .struck
+    }
+
+    /// Is `midi` only an upper partial (octave, twelfth, two octaves) of a lower note just plucked?
+    /// A plucked low note also sounds harmonics this note cannot explain (G#2 rings at G#3, which
+    /// D#4 never makes); an open string ringing along, or the body's hum, does not. In a chord, the
+    /// lower note's harmonics that the chord's own notes (or their harmonics) make are not its own:
+    /// C3 E3 G3 is not a C2.
+    public func overtone(_ midi: Int, since: Int = 0, allowing: Set<Int> = []) -> Bool {
+        guard let k = idx(midi) else { return false }
+        let c = config, now = at(k)
+        let avail = min(Int(c.riseSec * fs / Double(hopSize)), hop - since, depth - 1)
+        guard avail >= 1 else { return false }
+        let made = Set(allowing.flatMap { p in NoteJudge.partials.map { p + $0 } })
+        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] {
             let lowNote = midi - d
             guard lowNote >= c.lowestNote, let j = idx(lowNote), !allowing.contains(lowNote) else { continue }
             var own: Float = 0
-            for h in 2...config.harmonics where h % ratio != 0 && !made.contains(lowNote + NoteJudge.partials[h - 1]) {
+            for h in 2...c.harmonics where h % ratio != 0 && !made.contains(lowNote + NoteJudge.partials[h - 1]) {
                 own += weights[h - 1] * harm[j][h - 1]
             }
             let ownDB = 10 * log10(own + 1e-14)
             var jlo = Float.infinity
             for a in 1...avail { jlo = min(jlo, at(j, ago: a)) }
-            if ownDB >= now - c.uniqueDB && at(j) - jlo >= c.lowerRiseDB { return .overtone }
+            if ownDB >= now - c.uniqueDB && at(j) - jlo >= c.lowerRiseDB { return true }
         }
-        return .struck
+        return false
     }
 
     /// The hop where `midi`'s level first jumped (3 dB over its recent minimum), looking back

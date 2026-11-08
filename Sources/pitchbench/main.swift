@@ -22,8 +22,11 @@ func readMono(_ url: URL) throws -> ([Float], Double) {
     return (out, fmt.sampleRate)
 }
 
-func config(_ args: ArraySlice<String>) -> NoteJudge.Config {
-    var c = NoteJudge.Config()
+/// For --live: NoteJudge.Config.hybrid with any key=value overrides (nil = the app's own choice).
+nonisolated(unsafe) var liveConfig: NoteJudge.Config? = nil
+
+func config(_ args: ArraySlice<String>, base: NoteJudge.Config = NoteJudge.Config()) -> NoteJudge.Config {
+    var c = base
     for a in args {
         let kv = a.split(separator: "="); guard kv.count == 2, let v = Double(kv[1]) else { continue }
         switch kv[0] {
@@ -297,6 +300,13 @@ final class HybridEar: Ear {
         case 3:
             guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
             return dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue
+        case 4, 5:
+            // 4: mode 1, and not an overtone of a lower note just plucked (NoteJudge's veto);
+            // 5: the same, the veto only for steps of one note.
+            guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
+            guard bp.heard(midi, row: row, after: armed, on: onLow, note: 0)
+                || dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue else { return false }
+            return (mode == 5 && allowing.count > 1) || !dsp.judge.overtone(midi, since: since, allowing: allowing)
         default:
             guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
             return bp.heard(midi, row: row, after: armed, on: onLow, note: 0)
@@ -317,7 +327,7 @@ final class HybridEar: Ear {
 /// The app's own `Hearing` (NoteJudge + streamed Basic Pitch in Swift), fed 512-sample buffers like the mic tap.
 final class HearingEar: Ear {
     let ears: Hearing, x: [Float]
-    init(_ x: [Float], _ fs: Double, _ cfg: NoteJudge.Config, _ m: NoteModel.Config?) { ears = Hearing(sampleRate: fs, config: cfg, model: m); self.x = x }
+    init(_ x: [Float], _ fs: Double, _ cfg: NoteJudge.Config?, _ m: NoteModel.Config?) { ears = Hearing(sampleRate: fs, config: cfg, model: m); self.x = x }
     var onHop: ((Int) -> Void)? { get { ears.onHop } set { ears.onHop = newValue } }
     func time(ofHop h: Int) -> Double { ears.time(ofHop: h) }
     func struck(_ midi: Int, since: Int, allowing: Set<Int>) -> Bool { ears.struck(midi, since: since, allowing: allowing) }
@@ -444,9 +454,14 @@ func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = ni
         } else {
             guard let (x, fs) = try? readMono(URL(fileURLWithPath: rows[n][0])) else { return }
             if CommandLine.arguments.contains("--live") {
+                // The app's defaults (NoteModel.Config, NoteJudge.Config.hybrid) unless overridden here.
                 var m = NoteModel.Config()
-                m.onset = Float(postOn); m.note = Float(postNote); m.age = postAge; m.slack = PosteriorEar.slack
-                ear = HearingEar(x, fs, cfg, m)
+                let given = { (k: String) in CommandLine.arguments.contains { $0.hasPrefix(k + "=") } }
+                if given("on") { m.onset = Float(postOn) }
+                if given("note") { m.note = Float(postNote) }
+                if given("age") { m.age = postAge }
+                if given("slack") { m.slack = PosteriorEar.slack }
+                ear = HearingEar(x, fs, liveConfig, m)
             } else { ear = JudgeEar(x, fs, cfg) }
         }
         let r = simulate(ear, chart)
@@ -540,6 +555,7 @@ do {
         PosteriorEar.slack = a.first { $0.hasPrefix("slack=") }.flatMap { Double($0.dropFirst(6)) } ?? -0.03
         let post = a.firstIndex(of: "--post").flatMap { $0 + 1 < a.count ? URL(fileURLWithPath: a[$0 + 1]) : nil }
         func kv(_ k: String, _ d: Double) -> Double { a.first { $0.hasPrefix(k + "=") }.flatMap { Double($0.dropFirst(k.count + 1)) } ?? d }
+        if a.contains("--live") { let h = config(a[3...], base: .hybrid); liveConfig = h }
         try suite(URL(fileURLWithPath: a[2]), config(a[3...]), json: j, post: post, postOn: kv("on", 0.5), postNote: kv("note", 0.3), postAge: Int(kv("age", 4)),
                   hybrid: Int(kv("mode", 0)), hybridOn: kv("onlow", 0.3))
     case "probe" where a.count >= 7:
