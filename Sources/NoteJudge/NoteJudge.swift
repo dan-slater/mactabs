@@ -34,6 +34,8 @@ public final class NoteJudge {
         public var chordContrastDB: Float = 1  // in a chord of 3+ notes the others' overtones crowd the neighbours: ask less
         public var chordLowDB: Float = 14      // …and of the bottom harmonics
         public var lowDB: Float = 8        // harmonic 1 or 2 within this of the strongest (rejects ghosts below)
+        public var lowestNote = 0          // lower notes under this (the lowest open string) cannot explain a note away; 0 = any
+        public var repluckRiseDB: Float = 3 // a re-pluck also lifts the whole input by this much
         public init() {}
     }
 
@@ -136,6 +138,9 @@ public final class NoteJudge {
     }
 
     deinit { vDSP_destroy_fftsetup(fft) }
+
+    /// Semitones from a note to its harmonics 1…8 (nearest equal-tempered note).
+    public static let partials = [0, 12, 19, 24, 28, 31, 34, 36]
 
     public static func hz(_ midi: Int) -> Double { 440 * pow(2, Double(midi - 69) / 12) }
     public static func name(_ midi: Int) -> String {
@@ -292,7 +297,14 @@ public final class NoteJudge {
     /// after an earlier hit, so one pluck cannot satisfy two steps. `allowing` lists notes
     /// played with it (a chord) that may share its harmonics without explaining it away.
     public func struck(_ midi: Int, since: Int = 0, allowing: Set<Int> = []) -> Bool {
-        guard let k = idx(midi) else { return false }
+        verdict(midi, since: since, allowing: allowing) == .struck
+    }
+
+    /// The first test a note fails in the newest hop, in the order `struck` applies them (bench diagnosis).
+    public enum Verdict: Int, CaseIterable { case range, gate, share, onset, contrast, pitched, overtone, struck }
+
+    public func verdict(_ midi: Int, since: Int = 0, allowing: Set<Int> = []) -> Verdict {
+        guard let k = idx(midi) else { return .range }
         let c = config
         let now = at(k)
         // Share: this note's harmonics (or, in a chord, all the chord's notes together) carry a real
@@ -303,11 +315,12 @@ public final class NoteJudge {
             for m in allowing { if let j = idx(m) { sum += powf(10, at(j) / 10) } }
             chordLevel = 10 * log10(sum + 1e-14)
         }
-        guard now >= floorDB + c.gateDB, rmsDB >= c.minRMSDB, chordLevel >= rmsDB - c.shareDB else { return false }
+        guard now >= floorDB + c.gateDB, rmsDB >= c.minRMSDB else { return .gate }
+        guard chordLevel >= rmsDB - c.shareDB else { return .share }
         // Onset: a jump over the note's own recent minimum.
         let back = Int(c.riseSec * fs / Double(hopSize))
         let avail = min(back, hop - since, depth - 1)
-        guard avail >= 1 else { return false }
+        guard avail >= 1 else { return .onset }
         var lo = Float.infinity
         for a in 1...avail { lo = min(lo, at(k, ago: a)) }
         let slot0 = (samples / hopSize) % depth
@@ -315,31 +328,36 @@ public final class NoteJudge {
         // (a decaying string in a quiet room otherwise "re-plucks" on noise).
         var rmsLo = Float.infinity
         for a in 1...avail { rmsLo = min(rmsLo, rmsHist[(slot0 - a + depth * 4) % depth]) }
-        let replucked = newRow[k] - sharpHist[slot0][k] >= -c.repluckDB && rmsDB - rmsLo >= 3
-        guard now - lo >= c.riseDB || replucked else { return false }
+        let replucked = newRow[k] - sharpHist[slot0][k] >= -c.repluckDB && rmsDB - rmsLo >= c.repluckRiseDB
+        guard now - lo >= c.riseDB || replucked else { return .onset }
         // Clear of the semitones either side; or, when a neighbour is still ringing from the last
         // note, clear of it in the new energy alone (and not buried under it).
         let chord = allowing.count >= 3
         let cont = contrast(k)
         if cont < (chord ? c.chordContrastDB : c.contrastDB) {
-            guard cont > -c.buriedDB, diffContrast(k) >= c.diffContrastDB else { return false }
+            guard cont > -c.buriedDB, diffContrast(k) >= c.diffContrastDB else { return .contrast }
         }
         // Its bottom harmonics sound and its odd ones too: not a ghost, not an octave too low.
-        guard pitched(k, chord: chord) else { return false }
+        guard pitched(k, chord: chord) else { return .pitched }
         // Not an upper partial (octave, twelfth, two octaves) of a lower note that was just plucked.
         // A plucked low note also sounds harmonics this note cannot explain (G#2 rings at G#3,
         // which D#4 never makes); an open string ringing along, or the body's hum, does not.
+        // In a chord, the lower note's harmonics that the chord's own notes (or their harmonics) make
+        // are not its own: C3 E3 G3 is not a C2.
+        let made = Set(allowing.flatMap { p in NoteJudge.partials.map { p + $0 } })
         for (d, ratio) in [(12, 2), (19, 3), (24, 4)] {
             let lowNote = midi - d
-            guard let j = idx(lowNote), !allowing.contains(lowNote) else { continue }
+            guard lowNote >= c.lowestNote, let j = idx(lowNote), !allowing.contains(lowNote) else { continue }
             var own: Float = 0
-            for h in 2...config.harmonics where h % ratio != 0 { own += weights[h - 1] * harm[j][h - 1] }
+            for h in 2...config.harmonics where h % ratio != 0 && !made.contains(lowNote + NoteJudge.partials[h - 1]) {
+                own += weights[h - 1] * harm[j][h - 1]
+            }
             let ownDB = 10 * log10(own + 1e-14)
             var jlo = Float.infinity
             for a in 1...avail { jlo = min(jlo, at(j, ago: a)) }
-            if ownDB >= now - c.uniqueDB && at(j) - jlo >= c.lowerRiseDB { return false }
+            if ownDB >= now - c.uniqueDB && at(j) - jlo >= c.lowerRiseDB { return .overtone }
         }
-        return true
+        return .struck
     }
 
     /// The hop where `midi`'s level first jumped (3 dB over its recent minimum), looking back
