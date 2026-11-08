@@ -192,6 +192,23 @@ if [ -x "$BENCH" ] && "$BENCH" synth "$CH" "$WORK/opening.wav" 48000 1.15 >/dev/
 else bad "pitchbench synth failed"; fi
 say leave; sleep 0.3
 gcheck "esc/leave returns to the tab"         "not s['playing']"
+
+echo "== capo (a tab wants capo 1, the player has none on)"
+# An A minor shape twice. With capo 1 the game expects it a semitone up; the take has no capo.
+AM='{"string":5,"fret":0},{"string":4,"fret":2},{"string":3,"fret":2},{"string":2,"fret":1},{"string":1,"fret":0}'
+notes() { echo "$AM" | sed "s/{/{\"t\":$1,/g"; }
+echo "{\"title\":\"Capo test\",\"capo\":1,\"notes\":[$(notes 0),$(notes 2.5)]}" > "$WORK/capo.chart.json"
+echo "{\"title\":\"No capo\",\"notes\":[$(notes 0),$(notes 2.5)]}" > "$WORK/nocapo.chart.json"
+if "$BENCH" synth "$WORK/nocapo.chart.json" "$WORK/am.wav" 48000 1.15 >/dev/null; then
+  say "play $WORK/capo.chart.json"; sleep 0.2; say "feed $WORK/am.wav"; sleep 3
+  gcheck "an A minor without the capo is not taken for the capo-1 chord" "s['step']==0 and s['capo']==1"
+  gcheck "…and the game says so (press c)"      "'capo' in s['message'] and 'press c' in s['message']"
+  say capo; sleep 0.2
+  gcheck "c drops the capo"                      "s['capoOff']"
+  say "feed $WORK/am.wav"; sleep 3.5
+  gcheck "…and then the same A minor passes"     "s['step']>=1"
+  say leave; sleep 0.3
+else bad "pitchbench synth failed"; fi
 say playtab; sleep 0.5
 gcheck "g plays the open song's own tab lines" "s['playing'] and s['title']=='House of the Rising Sun' and s['steps']>=40"
 say "note 57"; sleep 0.2

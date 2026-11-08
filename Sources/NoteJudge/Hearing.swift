@@ -50,8 +50,12 @@ public final class Hearing {
         guard let model else { return judge.struck(midi, since: since, allowing: allowing) }
         let armed = judge.time(ofHop: since)
         guard model.heard(midi, after: armed, on: 0) else { return false }
-        guard model.heard(midi, after: armed, note: 0)
-            || judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue else { return false }
+        // Basic Pitch normalises its input, so silence or a quiet room comes out as confident
+        // "notes": the pitch must also clear NoteJudge's level gates (above the noise floor, a real
+        // share of what the mic hears).
+        let v = judge.verdict(midi, since: since, allowing: allowing).rawValue
+        guard v >= NoteJudge.Verdict.onset.rawValue else { return false }
+        guard model.heard(midi, after: armed, note: 0) || v > NoteJudge.Verdict.onset.rawValue else { return false }
         return allowing.count > 1 || !judge.overtone(midi, since: since, allowing: allowing)
     }
 }

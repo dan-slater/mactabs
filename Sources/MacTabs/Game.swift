@@ -19,6 +19,10 @@ final class Game: ObservableObject {
     @Published private(set) var micOn = false
     @Published var speed = 1.0
     @Published var message = ""
+    /// The tab asks for a capo but the player has none on (`c`): pitches moved down by it.
+    @Published private(set) var capoOff = false
+    /// The capo the tab asks for.
+    var capo: Int { chart?.capo ?? 0 }
     /// Wall time each step was hit, for the flash on the line.
     private(set) var hitWall: [Int: Double] = [:]
 
@@ -51,6 +55,11 @@ final class Game: ObservableObject {
             self.cents = cents
             self.level = level
         }
+        listener.onAlternate = { [weak self] step in
+            guard let self, step == self.index, self.capo > 0, !self.capoOff else { return }
+            self.message = "that sounded \(self.capo) fret\(self.capo == 1 ? "" : "s") low: no capo on? press c"
+            self.write(["event": "capo_hint", "step": step, "capo": self.capo])
+        }
         listener.onStruck = { [weak self] notes, step, rms, cents in
             guard let self, self.chart != nil, !self.done else { return }
             self.plucks += 1
@@ -76,6 +85,7 @@ final class Game: ObservableObject {
     }
 
     func start(_ chart: Chart, mic: Bool) {
+        capoOff = false
         if listener.ear == "hybrid" { NoteModel.prepare() }   // warm Basic Pitch while the mic starts
         beforeStart?()
         stop()
@@ -124,7 +134,18 @@ final class Game: ObservableObject {
 
     private func arm() {
         guard index < steps.count else { return }
-        listener.expect(step: index, pitches: steps[index].pitches, required: steps[index].required)
+        listener.expect(step: index, pitches: steps[index].pitches, required: steps[index].required,
+                        alternate: capo > 0 && !capoOff ? -capo : 0)
+    }
+
+    /// `c`: play a capo tab without the capo (every pitch down by it), or put it back.
+    func toggleCapo() {
+        guard let c = chart, c.capo > 0 else { message = "this song has no capo"; return }
+        capoOff.toggle()
+        chart = c.transposed(capoOff ? -c.capo : c.capo)
+        message = capoOff ? "playing without the capo (c puts it back)" : "capo \(c.capo) back on"
+        write(["event": "capo", "on": !capoOff])
+        arm()
     }
 
     // MARK: judging
@@ -174,7 +195,7 @@ final class Game: ObservableObject {
         }
         FileManager.default.createFile(atPath: url.path, contents: nil)
         log = FileHandle(forWritingAtPath: url.path)
-        write(["event": "start", "title": chart.title, "artist": chart.artist, "steps": chart.steps.count, "ear": listener.ear])
+        write(["event": "start", "title": chart.title, "artist": chart.artist, "steps": chart.steps.count, "ear": listener.ear, "capo": chart.capo])
     }
 
     private func write(_ obj: [String: Any]) {
@@ -191,6 +212,7 @@ final class Game: ObservableObject {
             "done": done, "waiting": waiting(now), "songTime": songTime(now), "plucks": plucks,
             "hits": hitWall.count, "mic": micOn, "speed": speed, "message": message,
             "latencies": latencies.map { Int($0 * 1000) }, "ear": listener.ear, "model": listener.modelLoaded,
+            "capo": capo, "capoOff": capoOff,
         ]
         let d = (try? JSONSerialization.data(withJSONObject: o)) ?? Data("{}".utf8)
         return String(decoding: d, as: UTF8.self)
@@ -237,6 +259,13 @@ struct PlayView: View {
             Text(game.chart?.artist ?? "").font(.title3).foregroundStyle(.secondary)
             Text("wait mode").font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
+            if game.capo > 0 {
+                Text(game.capoOff ? "capo \(game.capo) off · c" : "capo \(game.capo) · c")
+                    .font(.callout.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 2)
+                    .foregroundStyle(game.capoOff ? Color.secondary : Color.orange)
+                    .background((game.capoOff ? Color.secondary : Color.orange).opacity(0.15), in: Capsule())
+                    .help(game.capoOff ? "Playing without the capo. Press c to put it back." : "This tab wants a capo on fret \(game.capo). No capo? Press c.")
+            }
             Spacer()
             Button { game.stop() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless).help("Leave play mode (esc)")

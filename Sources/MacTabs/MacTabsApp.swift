@@ -227,7 +227,11 @@ struct ContentView: View {
                 case 126: game.faster()
                 case 125: game.slower()
                 default:
-                    if event.charactersIgnoringModifiers == "r" { game.restart() } else { return event }
+                    switch event.charactersIgnoringModifiers ?? "" {
+                    case "r": game.restart()
+                    case "c": game.toggleCapo()
+                    default: return event
+                    }
                 }
                 return nil
             }
@@ -319,6 +323,7 @@ struct ContentView: View {
                             }
                         } else if w == "playtab" { play()
                         } else if w == "leave" { game.stop()
+                        } else if w == "capo" { game.toggleCapo()
                         } else if w == "voice" { voice.toggle()
                         } else if w == "game" {
                             let s = game.stateJSON() + "\n"

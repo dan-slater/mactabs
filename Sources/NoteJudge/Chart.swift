@@ -1,9 +1,9 @@
 import Foundation
 
 /// A playable chart: notes with a time, a string (1 = high e … 6 = low E) and a fret.
-/// JSON: `{"title": …, "artist": …, "notes": [{"t": 3.36, "ts": 3.355, "string": 1, "fret": 0, "midi": 64}]}`.
+/// JSON: `{"title": …, "artist": …, "capo": 0, "notes": [{"t": 3.36, "ts": 3.355, "string": 1, "fret": 0, "midi": 64}]}`.
 /// `ts` (time snapped to the audio onset) wins over `t`; `midi` is derived from string/fret
-/// in standard tuning when missing.
+/// in standard tuning (plus the capo) when missing.
 public struct Chart {
     public struct Note: Hashable {
         public var time: Double
@@ -27,6 +27,8 @@ public struct Chart {
     public var title: String
     public var artist: String
     public var steps: [Step]
+    /// The capo the pitches include (frets stay as written, relative to it).
+    public var capo = 0
 
     public static let openStrings = [64, 59, 55, 50, 45, 40]   // e B G D A E
 
@@ -45,16 +47,26 @@ public struct Chart {
         let obj = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
         let raw = obj["notes"] as? [[String: Any]] ?? []
         func num(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }
+        let capo = num(obj["capo"]).map(Int.init) ?? 0
         let notes: [Note] = raw.compactMap { d in
             guard let t = num(d["ts"]) ?? num(d["t"]), let s = num(d["string"]).map(Int.init), let f = num(d["fret"]).map(Int.init),
                   (1...6).contains(s) else { return nil }
-            return Note(time: t, string: s, fret: f, midi: num(d["midi"]).map(Int.init) ?? Chart.openStrings[s - 1] + f)
+            return Note(time: t, string: s, fret: f, midi: num(d["midi"]).map(Int.init) ?? Chart.openStrings[s - 1] + capo + f)
         }
         let base = url.deletingPathExtension().deletingPathExtension().lastPathComponent   // "Artist - Title.chart.json"
         let parts = base.components(separatedBy: " - ")
         self.init(title: obj["title"] as? String ?? parts.last ?? base,
                   artist: obj["artist"] as? String ?? (parts.count > 1 ? parts[0] : ""),
                   notes: notes)
+        self.capo = capo
+    }
+
+    /// The same chart with every pitch moved `semitones` (frets as written): playing with or
+    /// without the capo the tab asks for.
+    public func transposed(_ semitones: Int) -> Chart {
+        var c = self
+        for i in c.steps.indices { for j in c.steps[i].notes.indices { c.steps[i].notes[j].midi += semitones } }
+        return c
     }
 
     /// Read the ASCII tab staves (`e|---0---|`) out of a tab's text: six lines in a row, high e
@@ -112,7 +124,9 @@ public struct Chart {
             if k > 0 { t += min(1.0, max(0.3, Double(c.col - cols[k - 1].col) * 0.09)) }
             for var n in c.notes { n.time = t; notes.append(n) }
         }
-        return Chart(title: title, artist: artist, notes: notes)
+        var c = Chart(title: title, artist: artist, notes: notes)
+        c.capo = capo
+        return c
     }
 
     /// Open-string pitches, high e first, from a low-to-high tuning name; standard when unreadable.

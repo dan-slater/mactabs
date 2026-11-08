@@ -17,6 +17,8 @@ final class Listener {
     var onHit: ((Hit) -> Void)?
     /// What the judge hears right now (main queue, ~15 Hz): loudest pitched note and input level.
     var onMeter: ((Int?, Float, Float?) -> Void)?
+    /// The step was heard played `alternate` instead (a capo's worth lower): main queue, once per step.
+    var onAlternate: ((Int) -> Void)?
     /// Every pluck the judge picks out while waiting (main queue), for the session log.
     var onStruck: (([Int], Int, Float, [Int]) -> Void)?
 
@@ -30,12 +32,15 @@ final class Listener {
     private var engine: AVAudioEngine?
     private var feeder: Thread?
     private var feedStop = false
+    /// Each file feed's thread runs only while this is still its own number (a new feed stops the old).
+    private var feedGen = 0
 
     // Judging state, touched only on `q`.
     private var step = -1
     private var expected: Set<Int> = []
     private var required: Set<Int> = []
     private var got: Set<Int> = []
+    private var alt: Set<Int> = [], altRequired: Set<Int> = [], altGot: Set<Int> = []
     private var since = 0
     private var lastMeter = 0.0
     private var lastPluckHop = -1000
@@ -49,12 +54,16 @@ final class Listener {
     var micRunning: Bool { engine?.isRunning == true }
 
     /// Wait for these pitches (one step). All must be struck after this call.
-    func expect(step: Int, pitches: Set<Int>, required: Set<Int>? = nil) {
+    /// `alternate`: the same step as it sounds without the capo; heard instead, `onAlternate` fires.
+    func expect(step: Int, pitches: Set<Int>, required: Set<Int>? = nil, alternate: Int = 0) {
         q.async { [self] in
             self.step = step
             expected = pitches
             self.required = required ?? pitches
             got = []
+            alt = alternate == 0 ? [] : Set(pitches.map { $0 + alternate })
+            altRequired = alternate == 0 ? [] : Set(self.required.map { $0 + alternate })
+            altGot = []
             since = judge?.hop ?? 0
         }
     }
@@ -90,12 +99,14 @@ final class Listener {
         let fmt = file.processingFormat
         q.sync { reset(rate: fmt.sampleRate); inputLatency = 0 }
         feedStop = false
+        feedGen += 1
+        let gen = feedGen
         let t = Thread { [weak self] in
             let chunk: AVAudioFrameCount = 512
             guard let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: chunk) else { return }
             let start = Self.now()
             var done = 0
-            while let self, !self.feedStop, (try? file.read(into: buf, frameCount: chunk)) != nil, buf.frameLength > 0 {
+            while let self, !self.feedStop, self.feedGen == gen, (try? file.read(into: buf, frameCount: chunk)) != nil, buf.frameLength > 0 {
                 let n = Int(buf.frameLength), chans = Int(fmt.channelCount)
                 var x = [Float](repeating: 0, count: n)
                 for c in 0..<chans { let p = buf.floatChannelData![c]; for i in 0..<n { x[i] += p[i] / Float(chans) } }
@@ -162,6 +173,14 @@ final class Listener {
         }
         guard step >= 0, !expected.isEmpty, let ears else { return }
         for p in required.subtracting(got) where ears.struck(p, since: since, allowing: expected) { got.insert(p) }
+        if !altRequired.isEmpty {
+            for p in altRequired.subtracting(altGot) where ears.struck(p, since: since, allowing: alt) { altGot.insert(p) }
+            if altGot.isSuperset(of: altRequired) && !got.isSuperset(of: required) {
+                altRequired = []
+                let s = step
+                DispatchQueue.main.async { [weak self] in self?.onAlternate?(s) }
+            }
+        }
         guard got.isSuperset(of: required) else { return }
         // Latency: from the hop where the note's level first jumped to now, plus transit + device.
         let onsetHop = required.map { judge.onsetHop($0, before: h, since: since) }.max() ?? h

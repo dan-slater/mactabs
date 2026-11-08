@@ -300,13 +300,15 @@ final class HybridEar: Ear {
         case 3:
             guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
             return dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue
-        case 4, 5:
+        case 4, 5, 6:
             // 4: mode 1, and not an overtone of a lower note just plucked (NoteJudge's veto);
-            // 5: the same, the veto only for steps of one note.
+            // 5: the same, the veto only for steps of one note; 6: mode 5 and NoteJudge's level
+            // gates (as Hearing: Basic Pitch hallucinates notes in silence).
             guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
-            guard bp.heard(midi, row: row, after: armed, on: onLow, note: 0)
-                || dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue else { return false }
-            return (mode == 5 && allowing.count > 1) || !dsp.judge.overtone(midi, since: since, allowing: allowing)
+            let v = dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue
+            if mode == 6 && v < NoteJudge.Verdict.onset.rawValue { return false }
+            guard bp.heard(midi, row: row, after: armed, on: onLow, note: 0) || v > NoteJudge.Verdict.onset.rawValue else { return false }
+            return (mode >= 5 && allowing.count > 1) || !dsp.judge.overtone(midi, since: since, allowing: allowing)
         default:
             guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
             return bp.heard(midi, row: row, after: armed, on: onLow, note: 0)
