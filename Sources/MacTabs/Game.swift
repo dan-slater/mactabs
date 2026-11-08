@@ -76,6 +76,7 @@ final class Game: ObservableObject {
     }
 
     func start(_ chart: Chart, mic: Bool) {
+        if listener.ear == "hybrid" { NoteModel.prepare() }   // warm Basic Pitch while the mic starts
         beforeStart?()
         stop()
         self.chart = chart
@@ -173,7 +174,7 @@ final class Game: ObservableObject {
         }
         FileManager.default.createFile(atPath: url.path, contents: nil)
         log = FileHandle(forWritingAtPath: url.path)
-        write(["event": "start", "title": chart.title, "artist": chart.artist, "steps": chart.steps.count])
+        write(["event": "start", "title": chart.title, "artist": chart.artist, "steps": chart.steps.count, "ear": listener.ear])
     }
 
     private func write(_ obj: [String: Any]) {
@@ -189,7 +190,7 @@ final class Game: ObservableObject {
             "playing": chart != nil, "title": chart?.title ?? "", "step": index, "steps": steps.count,
             "done": done, "waiting": waiting(now), "songTime": songTime(now), "plucks": plucks,
             "hits": hitWall.count, "mic": micOn, "speed": speed, "message": message,
-            "latencies": latencies.map { Int($0 * 1000) },
+            "latencies": latencies.map { Int($0 * 1000) }, "ear": listener.ear, "model": listener.modelLoaded,
         ]
         let d = (try? JSONSerialization.data(withJSONObject: o)) ?? Data("{}".utf8)
         return String(decoding: d, as: UTF8.self)

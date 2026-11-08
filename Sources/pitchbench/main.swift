@@ -50,6 +50,10 @@ func config(_ args: ArraySlice<String>) -> NoteJudge.Config {
         case "hop": c.hopSec = v
         case "lowest": c.lowestNote = Int(v)
         case "repluckrise": c.repluckRiseDB = Float(v)
+        case "chordrepluck": c.chordRepluckDB = Float(v)
+        case "chordnotes": c.chordNotes = Int(v)
+        case "skipmade": c.skipMade = v != 0
+        case "chordvetooff": c.chordVetoOff = Int(v)
         default: break
         }
     }
@@ -227,15 +231,18 @@ final class JudgeEar: Ear {
 
 /// Basic Pitch run as a stream (tools/basicpitch-bench.py): every `stride` samples at 22.05 kHz
 /// the model saw the last 2 s and we kept its newest `k` frames of onset and note posteriors.
-/// A note is struck when, in the newest window, a frame after the step was armed has an onset
+/// A note is struck when, in the newest window, a frame after the step was armed (and at least
+/// `age` frames old) has an onset
 /// posterior ≥ `on` and a note posterior ≥ `note`. File: int32 n, k, 88, stride; n×int32 window
 /// end (samples); then n×k×88 float16 onset, the same for note.
 final class PosteriorEar: Ear {
     let n: Int, k: Int, ends: [Int32], onset: [Float16], note: [Float16]
-    let on: Float16, noteMin: Float16
+    let on: Float16, noteMin: Float16, age: Int
     var onHop: ((Int) -> Void)?
     static let sr = 22050.0, frameHop = 256
-    init(_ url: URL, on: Double, note: Double) throws {
+    /// A frame counts for a step only when it is this much later than the moment the step was armed.
+    nonisolated(unsafe) static var slack = -0.03
+    init(_ url: URL, on: Double, note: Double, age: Int) throws {
         let d = try Data(contentsOf: url)
         let head = d.withUnsafeBytes { Array($0.bindMemory(to: Int32.self).prefix(4)) }
         let n = Int(head[0]), k = Int(head[1])
@@ -245,18 +252,23 @@ final class PosteriorEar: Ear {
         let base = ne + 4 * n
         onset = d.subdata(in: base..<(base + 2 * per)).withUnsafeBytes { Array($0.bindMemory(to: Float16.self)) }
         self.note = d.subdata(in: (base + 2 * per)..<(base + 4 * per)).withUnsafeBytes { Array($0.bindMemory(to: Float16.self)) }
-        self.on = Float16(on); noteMin = Float16(note)
+        self.on = Float16(on); noteMin = Float16(note); self.age = age
     }
     func time(ofHop h: Int) -> Double { Double(ends[min(h, n - 1)]) / Self.sr }
     var cur = 0
     func struck(_ midi: Int, since: Int, allowing: Set<Int>) -> Bool {
+        heard(midi, row: cur, after: time(ofHop: since), on: on, note: noteMin)
+    }
+    /// In window `row`, does a frame old enough and later than `after` reach both thresholds?
+    func heard(_ midi: Int, row cur: Int, after armed: Double, on: Float16, note noteMin: Float16) -> Bool {
         let p = midi - 21
-        guard (0..<88).contains(p) else { return false }
-        let armed = time(ofHop: since)
-        for f in 0..<k {
-            // Frame f of the newest k: its time is the window end minus (k - f) frames.
-            let ft = time(ofHop: cur) - Double((k - f) * Self.frameHop) / Self.sr
-            guard ft > armed - 0.03 else { continue }
+        guard (0..<88).contains(p), cur >= 0 else { return false }
+        // Only frames with `age` frames of audio after them: younger ones have not seen the attack
+        // yet and their onset posterior is noise (it peaks once 4-5 frames, ~50 ms, follow).
+        for f in 0..<max(0, k - age) {
+            // Frame f of the newest k: its time is the window end minus (k - f + 1) frames (calibrated on GuitarSet onsets).
+            let ft = time(ofHop: cur) - Double((k - f + 1) * Self.frameHop) / Self.sr
+            guard ft > armed + PosteriorEar.slack else { continue }
             let o = (cur * k + f) * 88 + p
             if onset[o] >= on && note[o] >= noteMin { return true }
         }
@@ -264,6 +276,53 @@ final class PosteriorEar: Ear {
     }
     func reached(_ midi: Int, since: Int, allowing: Set<Int>) -> Int? { nil }
     func run() { for h in 0..<n { cur = h; onHop?(h) } }
+}
+
+
+/// NoteJudge and Basic Pitch together, both streamed: Basic Pitch's note posterior says which
+/// pitches sound (it rarely mistakes the fret), an onset from either says a new pluck happened.
+/// mode 1: BP note ∧ (BP onset ∨ the judge's onset test passed); 2: the judge's verdict ∨ BP alone;
+/// 3: BP note ∧ the judge's onset test passed.
+final class HybridEar: Ear {
+    let dsp: JudgeEar, bp: PosteriorEar, mode: Int, onLow: Float16
+    var row = -1
+    init(_ dsp: JudgeEar, _ bp: PosteriorEar, mode: Int, onLow: Double) { self.dsp = dsp; self.bp = bp; self.mode = mode; self.onLow = Float16(onLow) }
+    var onHop: ((Int) -> Void)?
+    func time(ofHop h: Int) -> Double { dsp.time(ofHop: h) }
+    func struck(_ midi: Int, since: Int, allowing: Set<Int>) -> Bool {
+        let armed = time(ofHop: since)
+        switch mode {
+        case 2:
+            return dsp.struck(midi, since: since, allowing: allowing) || bp.heard(midi, row: row, after: armed, on: bp.on, note: bp.noteMin)
+        case 3:
+            guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
+            return dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue
+        default:
+            guard bp.heard(midi, row: row, after: armed, on: 0, note: bp.noteMin) else { return false }
+            return bp.heard(midi, row: row, after: armed, on: onLow, note: 0)
+                || dsp.judge.verdict(midi, since: since, allowing: allowing).rawValue > NoteJudge.Verdict.onset.rawValue
+        }
+    }
+    func reached(_ midi: Int, since: Int, allowing: Set<Int>) -> Int? { nil }
+    func run() {
+        dsp.onHop = { [unowned self] h in
+            let t = Int(self.time(ofHop: h) * PosteriorEar.sr)
+            while row + 1 < bp.n && Int(bp.ends[row + 1]) <= t { row += 1 }
+            onHop?(h)
+        }
+        dsp.run()
+    }
+}
+
+/// The app's own `Hearing` (NoteJudge + streamed Basic Pitch in Swift), fed 512-sample buffers like the mic tap.
+final class HearingEar: Ear {
+    let ears: Hearing, x: [Float]
+    init(_ x: [Float], _ fs: Double, _ cfg: NoteJudge.Config, _ m: NoteModel.Config?) { ears = Hearing(sampleRate: fs, config: cfg, model: m); self.x = x }
+    var onHop: ((Int) -> Void)? { get { ears.onHop } set { ears.onHop = newValue } }
+    func time(ofHop h: Int) -> Double { ears.time(ofHop: h) }
+    func struck(_ midi: Int, since: Int, allowing: Set<Int>) -> Bool { ears.struck(midi, since: since, allowing: allowing) }
+    func reached(_ midi: Int, since: Int, allowing: Set<Int>) -> Int? { nil }
+    func run() { for i in stride(from: 0, to: x.count, by: 512) { ears.process(Array(x[i..<min(x.count, i + 512)])) } }
 }
 
 /// One step of a take as the game would have judged it.
@@ -274,6 +333,7 @@ struct StepResult {
     var latency: Double      // judge hop end minus the annotated onset (hits only)
     var premature: Bool      // passed before its own note was played (a ringing note, an overtone, noise)
     var decoys: [Int: Bool]  // shift -> a step transposed by this many semitones would also have passed
+    var carried = false      // a required note was also in the step before (re-plucked while ringing)
     var stuck: [Int] = []    // missed steps: per required note not heard, the furthest test it reached (NoteJudge.Verdict)
 }
 
@@ -288,6 +348,8 @@ let decoyShifts = [-1, 1, -12, 12]
 /// that passes is a false accept (skipped when the shifted notes are really sounding nearby, or
 /// fall outside a standard-tuned guitar's E2…E6, as GuitarSet is).
 let diagnose = CommandLine.arguments.contains("--why")
+let trace = CommandLine.arguments.contains("--trace")
+let holdoff = CommandLine.arguments.first { $0.hasPrefix("holdoff=") }.flatMap { Double($0.dropFirst(8)) } ?? 0
 
 func simulate(_ judge: Ear, _ chart: Chart) -> [StepResult] {
     let steps = chart.steps
@@ -314,11 +376,16 @@ func simulate(_ judge: Ear, _ chart: Chart) -> [StepResult] {
     }
     func close(hit: Bool, at t: Double) {
         let s = steps[i]
+        if trace, hit, t < s.time - 0.1, i > 0, !s.required.isDisjoint(with: steps[i - 1].pitches) {
+            print(String(format: "TRACE %@ step %.3f hit %.3f prev %.3f armed %.3f %@", chart.title, s.time, t, steps[i - 1].time,
+                         judge.time(ofHop: since), s.pitches.sorted().map(NoteJudge.name).joined(separator: "+")))
+        }
         let k = min(3, s.pitches.count)
         var d: [Int: Bool] = [:]
         for e in decoy { d[e.shift] = e.fired }
         out.append(StepResult(kind: k, gap: i > 0 ? s.time - steps[i - 1].time : 9, hit: hit,
                               latency: hit ? t - s.time : .nan, premature: hit && t < s.time - tol, decoys: d,
+                              carried: i > 0 && !s.required.isDisjoint(with: steps[i - 1].pitches),
                               stuck: hit ? [] : s.required.subtracting(got).map { far[$0] ?? 0 }))
         i += 1
     }
@@ -330,11 +397,14 @@ func simulate(_ judge: Ear, _ chart: Chart) -> [StepResult] {
         let s = steps[i]
         if t > s.time - 0.6 {
             for k in decoy.indices where !decoy[k].fired {
-                for p in decoy[k].req.subtracting(decoy[k].got) where judge.struck(p, since: since, allowing: decoy[k].all) { decoy[k].got.insert(p) }
+                for p in decoy[k].req.subtracting(decoy[k].got) where !(holdoff > 0 && i > 0 && Double(h - since) * judge.time(ofHop: 1) < holdoff && steps[i - 1].pitches.contains(p)) && judge.struck(p, since: since, allowing: decoy[k].all) { decoy[k].got.insert(p) }
                 if decoy[k].got.isSuperset(of: decoy[k].req) { decoy[k].fired = true }
             }
         }
-        for p in s.required.subtracting(got) {
+        // A pitch the last step had is still in its own attack for one analysis window after that
+        // step passed: it cannot count again until then (as the app's Listener does).
+        let settling = holdoff > 0 && i > 0 && Double(h - since) * judge.time(ofHop: 1) < holdoff ? steps[i - 1].pitches : []
+        for p in s.required.subtracting(got) where !settling.contains(p) {
             if diagnose, t > s.time - 0.03, let r = judge.reached(p, since: since, allowing: s.pitches) {
                 far[p] = max(far[p] ?? 0, r)
                 if r == NoteJudge.Verdict.struck.rawValue { got.insert(p) }
@@ -352,22 +422,32 @@ func simulate(_ judge: Ear, _ chart: Chart) -> [StepResult] {
 
 /// `pitchbench suite <manifest.tsv> [key=value …] [--json out.json]`: every take in the
 /// manifest (lines: wav, chart, tag) through `simulate`, in parallel; totals per step kind.
-func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = nil, postOn: Double = 0.5, postNote: Double = 0.3) throws {
+func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = nil, postOn: Double = 0.5, postNote: Double = 0.3, postAge: Int = 4, hybrid: Int = 0, hybridOn: Double = 0.3) throws {
     let rows = try String(contentsOf: manifest, encoding: .utf8).split(separator: "\n")
         .map { $0.split(separator: "\t").map(String.init) }.filter { $0.count >= 2 && !$0[0].hasPrefix("#") }
     var results = [[StepResult]](repeating: [], count: rows.count)
     let tags = rows.map { $0.count > 2 ? $0[2] : "" }
     let lock = NSLock()
+    // CoreML runs share the GPU/ANE: a few takes at a time, or IOSurface allocation fails.
+    let gate = DispatchSemaphore(value: CommandLine.arguments.contains("--live") ? 3 : 64)
     DispatchQueue.concurrentPerform(iterations: rows.count) { n in
+        gate.wait(); defer { gate.signal() }
         guard let chart = try? Chart(url: URL(fileURLWithPath: rows[n][1])) else { return }
         let ear: Ear
         if let dir = post {
             let name = URL(fileURLWithPath: rows[n][0]).deletingPathExtension().lastPathComponent
-            guard let e = try? PosteriorEar(dir.appendingPathComponent(name + ".bp"), on: postOn, note: postNote) else { return }
-            ear = e
+            guard let e = try? PosteriorEar(dir.appendingPathComponent(name + ".bp"), on: postOn, note: postNote, age: postAge) else { return }
+            if hybrid > 0 {
+                guard let (x, fs) = try? readMono(URL(fileURLWithPath: rows[n][0])) else { return }
+                ear = HybridEar(JudgeEar(x, fs, cfg), e, mode: hybrid, onLow: hybridOn)
+            } else { ear = e }
         } else {
             guard let (x, fs) = try? readMono(URL(fileURLWithPath: rows[n][0])) else { return }
-            ear = JudgeEar(x, fs, cfg)
+            if CommandLine.arguments.contains("--live") {
+                var m = NoteModel.Config()
+                m.onset = Float(postOn); m.note = Float(postNote); m.age = postAge; m.slack = PosteriorEar.slack
+                ear = HearingEar(x, fs, cfg, m)
+            } else { ear = JudgeEar(x, fs, cfg) }
         }
         let r = simulate(ear, chart)
         lock.lock(); results[n] = r; lock.unlock()
@@ -377,7 +457,9 @@ func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = ni
         let hits = r.filter(\.hit), lat = hits.map(\.latency).filter { $0.isFinite }
         var m: [String: Double] = ["n": Double(r.count), "hit": frac(hits.count, r.count),
                                    "lat_med": median(lat) * 1000, "lat_p90": p90(lat) * 1000,
-                                   "premature": frac(r.filter(\.premature).count, r.count)]
+                                   "premature": frac(r.filter(\.premature).count, r.count),
+                                   // How early: just before the annotated onset (annotation lag) or well before (a real false pass).
+                                   "early100": frac(r.filter { $0.hit && $0.latency < -0.1 }.count, r.count)]
         for sh in decoyShifts {
             let d = r.compactMap { $0.decoys[sh] }
             m["decoy\(sh > 0 ? "+" : "")\(sh)"] = frac(d.filter { $0 }.count, d.count)
@@ -390,8 +472,8 @@ func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = ni
             print("    missed notes stopped at: " + NoteJudge.Verdict.allCases.filter { why[$0.rawValue] > 0 }
                 .map { "\($0)(\(100 * why[$0.rawValue] / tot)%)" }.joined(separator: " "))
         }
-        print(name.padding(toLength: 12, withPad: " ", startingAt: 0) + String(format: " n %5d  hit %5.1f%%  lat %3.0f/%3.0f ms  premature %4.1f%%  false accept −1 %4.1f%% +1 %4.1f%% −12 %4.1f%% +12 %4.1f%%",
-                     r.count, 100 * m["hit"]!, m["lat_med"]!, m["lat_p90"]!, 100 * m["premature"]!,
+        print(name.padding(toLength: 12, withPad: " ", startingAt: 0) + String(format: " n %5d  hit %5.1f%%  lat %3.0f/%3.0f ms  premature %4.1f%% (>100 ms %4.1f%%)  false accept −1 %4.1f%% +1 %4.1f%% −12 %4.1f%% +12 %4.1f%%",
+                     r.count, 100 * m["hit"]!, m["lat_med"]!, m["lat_p90"]!, 100 * m["premature"]!, 100 * m["early100"]!,
                      100 * m["decoy-1"]!, 100 * m["decoy+1"]!, 100 * m["decoy-12"]!, 100 * m["decoy+12"]!))
     }
     let all = results.flatMap { $0 }
@@ -402,6 +484,11 @@ func suite(_ manifest: URL, _ cfg: NoteJudge.Config, json: URL?, post: URL? = ni
     line("dyad", slow.filter { $0.kind == 2 })
     line("chord", slow.filter { $0.kind == 3 })
     line("fast(<0.2s)", all.filter { $0.gap < 0.2 })
+    if diagnose {
+        line("chord fresh", slow.filter { $0.kind == 3 && !$0.carried })
+        line("chord again", slow.filter { $0.kind == 3 && $0.carried })
+        line("single again", slow.filter { $0.kind == 1 && $0.carried })
+    }
     for t in Set(tags).sorted() where !t.isEmpty {
         line(t, zip(tags, results).filter { $0.0 == t }.flatMap { $0.1 }.filter { $0.gap >= 0.2 })
     }
@@ -450,9 +537,26 @@ do {
     case "suite" where a.count >= 3:
         let j = a.firstIndex(of: "--json").flatMap { $0 + 1 < a.count ? URL(fileURLWithPath: a[$0 + 1]) : nil }
         // --post <dir> [on=0.5 note=0.3]: judge with Basic Pitch posteriors instead of NoteJudge.
+        PosteriorEar.slack = a.first { $0.hasPrefix("slack=") }.flatMap { Double($0.dropFirst(6)) } ?? -0.03
         let post = a.firstIndex(of: "--post").flatMap { $0 + 1 < a.count ? URL(fileURLWithPath: a[$0 + 1]) : nil }
         func kv(_ k: String, _ d: Double) -> Double { a.first { $0.hasPrefix(k + "=") }.flatMap { Double($0.dropFirst(k.count + 1)) } ?? d }
-        try suite(URL(fileURLWithPath: a[2]), config(a[3...]), json: j, post: post, postOn: kv("on", 0.5), postNote: kv("note", 0.3))
+        try suite(URL(fileURLWithPath: a[2]), config(a[3...]), json: j, post: post, postOn: kv("on", 0.5), postNote: kv("note", 0.3), postAge: Int(kv("age", 4)),
+                  hybrid: Int(kv("mode", 0)), hybridOn: kv("onlow", 0.3))
+    case "probe" where a.count >= 7:
+        // pitchbench probe <wav> <midi> <from s> <to s> <armed s> [key=value …]: one note hop by hop.
+        let (x, fs) = try readMono(URL(fileURLWithPath: a[2]))
+        let m = Int(a[3])!, t0 = Double(a[4])!, t1 = Double(a[5])!, ta = Double(a[6])!
+        let j = NoteJudge(sampleRate: fs, config: config(a[7...]))
+        var since = 0
+        j.onHop = { h in
+            let t = j.time(ofHop: h)
+            if t < ta { since = h }
+            guard t >= t0 && t <= t1 else { return }
+            let f = j.features(m)
+            print(String(format: "%.3f lvl %6.1f rms %6.1f rise %5.1f contrast %5.1f low %5.1f odd %5.1f  %@", t, j.level(m), j.rmsDB,
+                         f["rise"]!, f["contrast"]!, f["low"]!, f["odd"]!, "\(j.verdict(m, since: since))"))
+        }
+        j.process(x)
     case "tabchart" where a.count >= 3:
         // Print the chart read from a .tab file's staves (checks the parser on real tabs).
         let text = try String(contentsOfFile: a[2], encoding: .utf8)

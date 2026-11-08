@@ -36,6 +36,10 @@ public final class NoteJudge {
         public var lowDB: Float = 8        // harmonic 1 or 2 within this of the strongest (rejects ghosts below)
         public var lowestNote = 0          // lower notes under this (the lowest open string) cannot explain a note away; 0 = any
         public var repluckRiseDB: Float = 3 // a re-pluck also lifts the whole input by this much
+        public var chordRepluckDB: Float = 2   // re-pluck share for a step of 2+ notes (a re-strum over a ringing chord)
+        public var chordNotes = 3              // steps with this many notes get the chord leniency (contrast, low)
+        public var chordVetoOff = 99           // steps with this many notes skip the overtone veto (the player strums a shape)
+        public var skipMade = false            // contrast ignores a neighbour that another chord note's harmonic makes
         public init() {}
     }
 
@@ -245,15 +249,21 @@ public final class NoteJudge {
     private func idx(_ midi: Int) -> Int? { notes.contains(midi) ? midi - config.lowMidi : nil }
     private func at(_ k: Int, ago: Int = 0) -> Float { hist[((samples / hopSize) - ago + depth * 4) % depth][k] }
 
-    /// Resolved-harmonic level over the louder semitone neighbour, dB.
-    private func contrast(_ k: Int) -> Float {
-        let slot = (samples / hopSize) % depth, row = sharpHist[slot]
-        return row[k] - max(k > 0 ? row[k - 1] : -200, k + 1 < row.count ? row[k + 1] : -200)
+    /// Resolved-harmonic level over the louder semitone neighbour, dB. Neighbours in `skip` (made by
+    /// the other notes of a chord) are left out.
+    private func contrast(_ k: Int, skip: Set<Int> = []) -> Float {
+        let slot = (samples / hopSize) % depth
+        return over(sharpHist[slot], k, skip)
     }
 
     /// The same, on the new energy only (a note still ringing next door drops out).
-    private func diffContrast(_ k: Int) -> Float {
-        newRow[k] - max(k > 0 ? newRow[k - 1] : -200, k + 1 < newRow.count ? newRow[k + 1] : -200)
+    private func diffContrast(_ k: Int, skip: Set<Int> = []) -> Float { over(newRow, k, skip) }
+
+    private func over(_ row: [Float], _ k: Int, _ skip: Set<Int>) -> Float {
+        let m = k + config.lowMidi
+        let below = k > 0 && !skip.contains(m - 1) ? row[k - 1] : -200
+        let above = k + 1 < row.count && !skip.contains(m + 1) ? row[k + 1] : -200
+        return row[k] - max(below, above)
     }
 
     /// Could this note be what is sounding (not a ghost below it, not an octave too low)?
@@ -328,14 +338,18 @@ public final class NoteJudge {
         // (a decaying string in a quiet room otherwise "re-plucks" on noise).
         var rmsLo = Float.infinity
         for a in 1...avail { rmsLo = min(rmsLo, rmsHist[(slot0 - a + depth * 4) % depth]) }
-        let replucked = newRow[k] - sharpHist[slot0][k] >= -c.repluckDB && rmsDB - rmsLo >= c.repluckRiseDB
+        let chord = allowing.count >= c.chordNotes
+        let replucked = newRow[k] - sharpHist[slot0][k] >= -(allowing.count >= 2 ? c.chordRepluckDB : c.repluckDB) && rmsDB - rmsLo >= c.repluckRiseDB
         guard now - lo >= c.riseDB || replucked else { return .onset }
         // Clear of the semitones either side; or, when a neighbour is still ringing from the last
         // note, clear of it in the new energy alone (and not buried under it).
-        let chord = allowing.count >= 3
-        let cont = contrast(k)
+        // In a chord, the other notes' harmonics land next door (G3's twelfth is D5, beside C#5 and
+        // D#5): a neighbour one of them makes is not a rival.
+        let made = Set(allowing.flatMap { p in NoteJudge.partials.map { p + $0 } })
+        let rivals = c.skipMade ? made.subtracting(NoteJudge.partials.map { midi + $0 }) : []
+        let cont = contrast(k, skip: rivals)
         if cont < (chord ? c.chordContrastDB : c.contrastDB) {
-            guard cont > -c.buriedDB, diffContrast(k) >= c.diffContrastDB else { return .contrast }
+            guard cont > -c.buriedDB, diffContrast(k, skip: rivals) >= c.diffContrastDB else { return .contrast }
         }
         // Its bottom harmonics sound and its odd ones too: not a ghost, not an octave too low.
         guard pitched(k, chord: chord) else { return .pitched }
@@ -344,8 +358,7 @@ public final class NoteJudge {
         // which D#4 never makes); an open string ringing along, or the body's hum, does not.
         // In a chord, the lower note's harmonics that the chord's own notes (or their harmonics) make
         // are not its own: C3 E3 G3 is not a C2.
-        let made = Set(allowing.flatMap { p in NoteJudge.partials.map { p + $0 } })
-        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] {
+        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] where allowing.count < c.chordVetoOff {
             let lowNote = midi - d
             guard lowNote >= c.lowestNote, let j = idx(lowNote), !allowing.contains(lowNote) else { continue }
             var own: Float = 0

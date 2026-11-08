@@ -186,6 +186,7 @@ if [ -x "$BENCH" ] && "$BENCH" synth "$CH" "$WORK/opening.wav" 48000 1.15 >/dev/
   say "play $CH"; sleep 0.2; say "feed $WORK/opening.wav"; sleep 8.5
   gcheck "the judge hears every note of the recording" "s['done'] and s['hits']==9"
   gcheck "latency is measured and sane (<250 ms)"      "len(s['latencies'])==9 and max(s['latencies'])<250"
+  gcheck "Basic Pitch loaded from the app bundle and listening" "s['ear']=='hybrid' and s['model']"
   echo "  latencies (ms): $(gstate | field latencies)"
   grep -q '"event":"done"' "$FIFO.play.jsonl" && ok "session log written" || bad "no session log"
 else bad "pitchbench synth failed"; fi

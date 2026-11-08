@@ -2,9 +2,10 @@ import AVFoundation
 import Foundation
 import NoteJudge
 
-/// Feeds audio (the mic, or a file for tests) into a NoteJudge and reports when the notes it
-/// is waiting for are struck. All judging happens on one serial queue; results come back on
-/// the main queue.
+/// Feeds audio (the mic, or a file for tests) into `Hearing` (NoteJudge + Basic Pitch) and reports
+/// when the notes it is waiting for are struck. All judging happens on one serial queue; results
+/// come back on the main queue. `defaults write dev.danielslater.tabs play.ear judge` listens
+/// with NoteJudge alone (to compare live).
 final class Listener {
     struct Hit {
         let step: Int
@@ -21,6 +22,11 @@ final class Listener {
 
     private let q = DispatchQueue(label: "mactabs.listener", qos: .userInteractive)
     private var judge: NoteJudge?
+    private var ears: Hearing?
+    /// "hybrid" (NoteJudge + Basic Pitch, default) or "judge" (NoteJudge alone); read at each start.
+    var ear: String { UserDefaults.standard.string(forKey: "play.ear") == "judge" ? "judge" : "hybrid" }
+    /// Whether Basic Pitch is listening in the current run (it attaches once warm).
+    var modelLoaded: Bool { q.sync { ears?.model != nil } }
     private var engine: AVAudioEngine?
     private var feeder: Thread?
     private var feedStop = false
@@ -120,19 +126,20 @@ final class Listener {
     // MARK: judging (on q)
 
     private func reset(rate: Double) {
-        let j = NoteJudge(sampleRate: rate)
-        j.onHop = { [weak self] h in self?.hop(h) }
-        judge = j
+        let e = Hearing(sampleRate: rate, model: ear == "hybrid" ? .init() : nil, waitForModel: false)
+        e.onHop = { [weak self] h in self?.hop(h) }
+        ears = e
+        judge = e.judge
         since = 0
         got = []
     }
 
     private func feed(_ x: [Float], host: Double) {
-        guard let judge else { return }
+        guard let judge, let ears else { return }
         bufStartSample = judge.samples
         bufStartHost = host
         bufFrames = x.count
-        judge.process(x)
+        ears.process(x)
     }
 
     private func hop(_ h: Int) {
@@ -153,8 +160,8 @@ final class Listener {
             }
             DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms, cents) }
         }
-        guard step >= 0, !expected.isEmpty else { return }
-        for p in required.subtracting(got) where judge.struck(p, since: since, allowing: expected) { got.insert(p) }
+        guard step >= 0, !expected.isEmpty, let ears else { return }
+        for p in required.subtracting(got) where ears.struck(p, since: since, allowing: expected) { got.insert(p) }
         guard got.isSuperset(of: required) else { return }
         // Latency: from the hop where the note's level first jumped to now, plus transit + device.
         let onsetHop = required.map { judge.onsetHop($0, before: h, since: since) }.max() ?? h
