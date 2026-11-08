@@ -1,4 +1,5 @@
 import Foundation
+import NoteJudge
 
 /// One `.tab` file: a `---` YAML-ish frontmatter block followed by monospace text.
 struct TabFile: Identifiable, Hashable {
@@ -8,6 +9,15 @@ struct TabFile: Identifiable, Hashable {
     var modified: Date = .distantPast
 
     var id: URL { url }
+
+    /// A play-mode chart read from this tab's ASCII staves (nil for chord sheets).
+    var staffChart: Chart? {
+        Chart.fromTab(body, title: title, artist: artist, tuning: meta["tuning"], capo: Int(meta["capo"] ?? "") ?? 0)
+    }
+    /// Cheap check for the icon row: at least one `e|---` style line.
+    var hasStaves: Bool {
+        body.range(of: #"(?m)^\s*[A-Ga-g][#b]?\s*\|+-{3,}"#, options: .regularExpression) != nil
+    }
     var title: String { meta["title"] ?? url.deletingPathExtension().lastPathComponent }
     var artist: String { meta["artist"] ?? "" }
     var scroll: Double { Double(meta["scroll"] ?? "") ?? 1.0 }

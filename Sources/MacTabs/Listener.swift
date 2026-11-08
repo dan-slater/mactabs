@@ -28,6 +28,7 @@ final class Listener {
     // Judging state, touched only on `q`.
     private var step = -1
     private var expected: Set<Int> = []
+    private var required: Set<Int> = []
     private var got: Set<Int> = []
     private var since = 0
     private var lastMeter = 0.0
@@ -42,10 +43,11 @@ final class Listener {
     var micRunning: Bool { engine?.isRunning == true }
 
     /// Wait for these pitches (one step). All must be struck after this call.
-    func expect(step: Int, pitches: Set<Int>) {
+    func expect(step: Int, pitches: Set<Int>, required: Set<Int>? = nil) {
         q.async { [self] in
             self.step = step
             expected = pitches
+            self.required = required ?? pitches
             got = []
             since = judge?.hop ?? 0
         }
@@ -152,10 +154,10 @@ final class Listener {
             DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms, cents) }
         }
         guard step >= 0, !expected.isEmpty else { return }
-        for p in expected.subtracting(got) where judge.struck(p, since: since, allowing: expected) { got.insert(p) }
-        guard got == expected else { return }
+        for p in required.subtracting(got) where judge.struck(p, since: since, allowing: expected) { got.insert(p) }
+        guard got.isSuperset(of: required) else { return }
         // Latency: from the hop where the note's level first jumped to now, plus transit + device.
-        let onsetHop = expected.map { judge.onsetHop($0, before: h, since: since) }.max() ?? h
+        let onsetHop = required.map { judge.onsetHop($0, before: h, since: since) }.max() ?? h
         let onsetSample = onsetHop * judge.hopSize - judge.windowSize / 4
         let onsetHost = bufStartHost + Double(onsetSample - bufStartSample) / judge.fs
         let latency = max(0, now - onsetHost) + inputLatency

@@ -191,6 +191,13 @@ if [ -x "$BENCH" ] && "$BENCH" synth "$CH" "$WORK/opening.wav" 48000 1.15 >/dev/
 else bad "pitchbench synth failed"; fi
 say leave; sleep 0.3
 gcheck "esc/leave returns to the tab"         "not s['playing']"
+say playtab; sleep 0.5
+gcheck "g plays the open song's own tab lines" "s['playing'] and s['title']=='House of the Rising Sun' and s['steps']>=40"
+say "note 57"; sleep 0.2
+gcheck "a two-note step waits for both"        "s['step']==0"
+say "note 45"; sleep 0.2
+gcheck "…and passes with both (A3 + A2)"       "s['step']==1"
+say leave; sleep 0.3
 
 echo
 echo "passed $pass, failed $fail — shots in $SHOTS/"

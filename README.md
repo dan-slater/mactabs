@@ -61,8 +61,10 @@ sessions are capped at about a minute, so the app rolls them over every 50 s whi
 
 ## Play mode (wait mode, early demo)
 
-Put a chart next to your tabs as `Artist - Title.chart.json` and press `g` (or click the game
-controller in the icon row, or pick it from the **Play** menu). Six lanes scroll the notes
+Open a song and press `g` (or click the game controller in the icon row). Any tab with ASCII
+tab lines (`e|---0---`) plays straight from those lines, with the file's `tuning:` and `capo:`
+applied; a chord sheet has nothing to play. A hand-made or generated chart next to your tabs,
+`Artist - Title.chart.json`, takes priority and is also listed in the **Play** menu. Six lanes scroll the notes
 towards a hit line, fret numbers on the notes; the highway stops at each note until you play
 that pitch into the Mac's microphone. It judges **pitch, not string**: any string and fret that
 sounds the note counts. Voice commands switch off while you play (they share the mic).

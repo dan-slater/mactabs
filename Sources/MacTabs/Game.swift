@@ -72,6 +72,10 @@ final class Game: ObservableObject {
         let chart: Chart
         do { chart = try Chart(url: url) } catch { message = "cannot read \(url.lastPathComponent)"; return }
         guard !chart.steps.isEmpty else { message = "no notes in \(url.lastPathComponent)"; return }
+        start(chart, mic: mic)
+    }
+
+    func start(_ chart: Chart, mic: Bool) {
         beforeStart?()
         stop()
         self.chart = chart
@@ -119,7 +123,7 @@ final class Game: ObservableObject {
 
     private func arm() {
         guard index < steps.count else { return }
-        listener.expect(step: index, pitches: steps[index].pitches)
+        listener.expect(step: index, pitches: steps[index].pitches, required: steps[index].required)
     }
 
     // MARK: judging
@@ -135,7 +139,7 @@ final class Game: ObservableObject {
         guard index < steps.count else { return }
         plucks += 1
         injected.formUnion(notes)
-        if steps[index].pitches.isSubset(of: injected) { injected = []; advance(latency: nil) }
+        if steps[index].required.isSubset(of: injected) { injected = []; advance(latency: nil) }
     }
 
     private func advance(latency: Double?) {

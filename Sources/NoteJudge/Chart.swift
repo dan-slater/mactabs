@@ -16,6 +16,12 @@ public struct Chart {
         public var time: Double
         public var notes: [Note]
         public var pitches: Set<Int> { Set(notes.map(\.midi)) }
+        /// What must be heard to pass: every note of a single note or a dyad; the lowest and
+        /// highest of a bigger chord (a strum rarely sounds all six clearly).
+        public var required: Set<Int> {
+            let p = pitches
+            return p.count <= 2 ? p : [p.min()!, p.max()!]
+        }
     }
 
     public var title: String
@@ -49,6 +55,79 @@ public struct Chart {
         self.init(title: obj["title"] as? String ?? parts.last ?? base,
                   artist: obj["artist"] as? String ?? (parts.count > 1 ? parts[0] : ""),
                   notes: notes)
+    }
+
+    /// Read the ASCII tab staves (`e|---0---|`) out of a tab's text: six lines in a row, high e
+    /// first. Notes in one column form a step. Spacing follows the columns, kept between 0.3 and
+    /// 1 s per step (wait mode stops at every note anyway). `tuning` is low to high ("EADGBE",
+    /// "DADGBE", "Eb Ab Db Gb Bb Eb"); `capo` raises every fret. Nil when there are no staves.
+    public static func fromTab(_ text: String, title: String, artist: String, tuning: String? = nil, capo: Int = 0) -> Chart? {
+        let open = openStrings(tuning).map { $0 + capo }    // high e first
+        let staff = try! NSRegularExpression(pattern: #"^\s*[A-Ga-g][#b]?\s*\|+(.*)$"#)
+        func content(_ line: String) -> [Character]? {
+            let ns = line as NSString
+            guard let m = staff.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) else { return nil }
+            var body = ns.substring(with: m.range(at: 1))
+            guard body.filter({ $0 == "-" }).count >= 4 else { return nil }
+            // Drop a trailing "(x4)" or similar after the last bar line.
+            if let bar = body.lastIndex(of: "|"), !body[body.index(after: bar)...].contains("-") { body = String(body[..<bar]) }
+            return Array(body)
+        }
+        let lines = text.components(separatedBy: "\n")
+        var cols: [(col: Int, notes: [Note])] = []
+        var base = 0, i = 0
+        while i + 6 <= lines.count {
+            let block = lines[i..<(i + 6)].map(content)
+            guard block.allSatisfy({ $0 != nil }) else { i += 1; continue }
+            let rows = block.map { $0! }
+            let width = rows.map(\.count).max() ?? 0
+            var skip = Array(repeating: -1, count: 6)
+            for c in 0..<width {
+                var notes: [Note] = []
+                for (s, row) in rows.enumerated() where c < row.count && c != skip[s] {
+                    guard let d = row[c].wholeNumberValue, row[c].isASCII else { continue }
+                    var fret = d
+                    if c + 1 < row.count, let d2 = row[c + 1].wholeNumberValue, row[c + 1].isASCII, d * 10 + d2 <= 24 {
+                        fret = d * 10 + d2; skip[s] = c + 1
+                    }
+                    notes.append(Note(time: 0, string: s + 1, fret: fret, midi: open[s] + fret))
+                }
+                if !notes.isEmpty { cols.append((base + c, notes)) }
+            }
+            base += width + 8
+            i += 6
+        }
+        guard cols.count >= 2 else { return nil }
+        var t = 0.0, notes: [Note] = []
+        for (k, c) in cols.enumerated() {
+            if k > 0 { t += min(1.0, max(0.3, Double(c.col - cols[k - 1].col) * 0.09)) }
+            for var n in c.notes { n.time = t; notes.append(n) }
+        }
+        return Chart(title: title, artist: artist, notes: notes)
+    }
+
+    /// Open-string pitches, high e first, from a low-to-high tuning name; standard when unreadable.
+    public static func openStrings(_ tuning: String?) -> [Int] {
+        guard let tuning else { return openStrings }
+        let pcs: [Character: Int] = ["C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11]
+        var names: [Int] = []
+        let chars = Array(tuning.replacingOccurrences(of: " ", with: ""))
+        var k = 0
+        while k < chars.count {
+            guard let pc = pcs[Character(chars[k].uppercased())] else { k += 1; continue }
+            var p = pc
+            if k + 1 < chars.count, chars[k + 1] == "#" { p += 1; k += 1 }
+            else if k + 1 < chars.count, chars[k + 1] == "b" { p -= 1; k += 1 }
+            names.append((p + 12) % 12); k += 1
+        }
+        guard names.count == 6 else { return openStrings }
+        // Each string takes the octave nearest standard tuning's.
+        let std = Array(openStrings.reversed())             // low E first
+        let low = zip(names, std).map { pc, s -> Int in
+            let base = s - ((s % 12) - pc)
+            return [base - 12, base, base + 12].min { abs($0 - s) < abs($1 - s) }!
+        }
+        return low.reversed()
     }
 
     public var duration: Double { steps.last.map { $0.time } ?? 0 }

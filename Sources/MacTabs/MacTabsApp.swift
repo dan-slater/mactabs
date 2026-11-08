@@ -136,7 +136,7 @@ struct ContentView: View {
                         HStack {
                             Spacer()
                             TabActions(tab: tab, song: currentSong, player: player, voice: voice, openVersion: openVersion,
-                                       chart: library.chart(for: tab), play: { play() })
+                                       canPlay: library.chart(for: tab) != nil || tab.hasStaves, play: { play() })
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(tab.title).font(.title2.weight(.semibold)).lineLimit(1)
@@ -317,6 +317,7 @@ struct ContentView: View {
                                     }
                                 }
                             }
+                        } else if w == "playtab" { play()
                         } else if w == "leave" { game.stop()
                         } else if w == "voice" { voice.toggle()
                         } else if w == "game" {
@@ -333,12 +334,11 @@ struct ContentView: View {
         }
     }
 
-    /// Play the open song's chart, else the first chart in the folder.
+    /// Play the open song: its .chart.json if there is one, else the notes in its tab lines.
     func play() {
-        guard let url = library.chart(for: player.tab) ?? library.charts.first else {
-            player.flash("no chart: put Artist - Title.chart.json in the tabs folder"); return
-        }
-        game.start(url, mic: !AppDelegate.testing)
+        if let url = library.chart(for: player.tab) { game.start(url, mic: !AppDelegate.testing); return }
+        if let chart = player.tab?.staffChart { game.start(chart, mic: !AppDelegate.testing); return }
+        player.flash(player.tab == nil ? "open a song first" : "no tab lines in this version to play (chords only)")
     }
 
     func currentLine() -> Int {

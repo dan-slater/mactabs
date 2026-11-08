@@ -9,8 +9,8 @@ struct TabActions: View {
     @ObservedObject var player: Player
     @ObservedObject var voice: Voice
     let openVersion: (TabFile) -> Void
-    /// A play-mode chart for this song, if one sits in the folder.
-    var chart: URL? = nil
+    /// A chart file or tab lines to play along to.
+    var canPlay = false
     var play: () -> Void = {}
 
     var body: some View {
@@ -36,7 +36,7 @@ struct TabActions: View {
             if let link = tab.sourceURL {
                 icon("arrow.up.right.square", "Open on \(tab.sourceName)") { NSWorkspace.shared.open(link) }
             }
-            if chart != nil {
+            if canPlay {
                 icon("gamecontroller", "Play along: wait mode (g)") { play() }
             }
             icon("square.grid.2x2", "Chord diagrams (c)", on: player.showChords) { player.showChords.toggle() }

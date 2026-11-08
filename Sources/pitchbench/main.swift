@@ -200,6 +200,18 @@ do {
     switch a.count > 1 ? a[1] : "" {
     case "eval" where a.count >= 4:
         try eval(URL(fileURLWithPath: a[2]), URL(fileURLWithPath: a[3]), config(a[4...]), verbose: a.contains("-v"))
+    case "tabchart" where a.count >= 3:
+        // Print the chart read from a .tab file's staves (checks the parser on real tabs).
+        let text = try String(contentsOfFile: a[2], encoding: .utf8)
+        func meta(_ k: String) -> String? {
+            text.components(separatedBy: "\n").first { $0.hasPrefix(k + ":") }.map { String($0.dropFirst(k.count + 1)).trimmingCharacters(in: .whitespaces) }
+        }
+        guard let c = Chart.fromTab(text, title: meta("title") ?? "", artist: meta("artist") ?? "", tuning: meta("tuning"), capo: Int(meta("capo") ?? "") ?? 0)
+        else { print("no staves"); exit(1) }
+        print("\(c.steps.count) steps, \(String(format: "%.0f", c.duration)) s")
+        for s in c.steps.prefix(a.count > 3 ? Int(a[3]) ?? 16 : 16) {
+            print(String(format: "%6.2f  ", s.time) + s.notes.map { "s\($0.string)f\($0.fret)=\(NoteJudge.name($0.midi))" }.joined(separator: " "))
+        }
     case "synth" where a.count >= 4:
         try synth(URL(fileURLWithPath: a[2]), URL(fileURLWithPath: a[3]), rate: a.count > 4 ? Double(a[4]) ?? 44100 : 44100,
                   offset: a.count > 5 ? Double(a[5]) ?? 0 : 0)
