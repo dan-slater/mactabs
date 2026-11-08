@@ -8,9 +8,11 @@ import SwiftUI
 // Settled 2026-10-17: icon row right-aligned above the name; source link only in that row;
 // chord lines teal.
 
-/// Play mode: notes falling down six lanes, or sliding left along six tab lines.
+/// Play mode: notes sliding left along six tab lines (coloured notes; a printed-tab look with the
+/// play line at the left; the same with the play line in the middle so played notes stay in
+/// view), or falling down six lanes. Daniel 2026-11-08: falling lanes confuse, wants sideways tab.
 enum HighwayLayout: String, CaseIterable, Identifiable {
-    case lanes = "Falling lanes", strip = "Tab strip"
+    case strip = "Tab strip", plain = "Printed tab", plainCentre = "Printed, centred", lanes = "Falling lanes"
     var id: String { rawValue }
 }
 
@@ -22,7 +24,7 @@ enum NoteLabel: String, CaseIterable, Identifiable {
 
 struct DesignPanel: View {
     static let hasForks = true
-    @AppStorage("design.highway") private var highway: HighwayLayout = .lanes
+    @AppStorage("design.highway") private var highway: HighwayLayout = .strip
     @AppStorage("design.noteLabel") private var noteLabel: NoteLabel = .fret
 
     var body: some View {

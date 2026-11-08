@@ -201,7 +201,7 @@ final class Game: ObservableObject {
 
 struct PlayView: View {
     @ObservedObject var game: Game
-    @AppStorage("design.highway") private var layout: HighwayLayout = .lanes
+    @AppStorage("design.highway") private var layout: HighwayLayout = .strip
     @AppStorage("design.noteLabel") private var label: NoteLabel = .fret
     @State private var showDesign = false
 
@@ -214,6 +214,8 @@ struct PlayView: View {
                     switch layout {
                     case .lanes: drawLanes(&ctx, size, now)
                     case .strip: drawStrip(&ctx, size, now)
+                    case .plain: drawPrinted(&ctx, size, now, playAt: 0.16)
+                    case .plainCentre: drawPrinted(&ctx, size, now, playAt: 0.42)
                     }
                 }
             }
@@ -354,6 +356,50 @@ struct PlayView: View {
                 ctx.opacity = alpha
                 ctx.draw(noteText(n, size: 19), at: CGPoint(x: r.midX, y: r.midY))
                 ctx.opacity = 1
+            }
+        }
+    }
+
+    /// Like a printed tab: six thin grey lines, high e on top, fret numbers in the lines (the line
+    /// breaks around each number), moving left to a play line at `playAt` of the width. The step
+    /// being waited for is in the accent colour on a soft column; played steps stay, greyed.
+    private func drawPrinted(_ ctx: inout GraphicsContext, _ size: CGSize, _ now: Double, playAt: CGFloat) {
+        let gap = min(40, size.height * 0.6 / 6), y0 = (size.height - gap * 5) / 2
+        let playX = max(70, size.width * playAt), pps = 200.0
+        let t = game.songTime(now), waiting = game.waiting(now)
+        let paper = Color(nsColor: .textBackgroundColor)
+        let font = Font.system(size: gap * 0.62, weight: .bold, design: .monospaced)
+        func lineY(_ string: Int) -> CGFloat { y0 + gap * CGFloat(string - 1) }
+        for s in 1...6 {
+            let y = lineY(s)
+            ctx.stroke(Path { $0.move(to: CGPoint(x: 44, y: y)); $0.addLine(to: CGPoint(x: size.width - 12, y: y)) },
+                       with: .color(.secondary.opacity(0.55)), lineWidth: 1)
+            ctx.draw(Text(Self.stringNames[s - 1] + "|").font(.system(size: gap * 0.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.secondary), at: CGPoint(x: 26, y: y))
+        }
+        // The column being played: a soft band, then the play line.
+        if game.index < game.steps.count {
+            let x = playX + CGFloat((game.steps[game.index].time - t) * pps)
+            ctx.fill(Path(roundedRect: CGRect(x: x - gap * 0.6, y: y0 - gap * 0.7, width: gap * 1.2, height: gap * 6.4), cornerRadius: 8),
+                     with: .color(Color.accentColor.opacity(waiting ? 0.16 + 0.05 * sin(now * 6) : 0.08)))
+        }
+        ctx.stroke(Path { $0.move(to: CGPoint(x: playX, y: y0 - gap * 0.9)); $0.addLine(to: CGPoint(x: playX, y: y0 + gap * 5.9)) },
+                   with: .color(waiting ? .accentColor : .primary.opacity(0.35)), lineWidth: waiting ? 3 : 1.5)
+        for (i, step) in game.steps.enumerated() {
+            let x = playX + CGFloat((step.time - t) * pps)
+            if x > size.width + 40 { break }
+            if x < 40 { continue }
+            let played = i < game.index, current = i == game.index
+            let ink: Color = played ? .secondary.opacity(0.45) : current ? .accentColor : .primary
+            for n in step.notes {
+                var txt = Text("\(n.fret)").font(font).foregroundColor(ink)
+                if label == .fretName {
+                    txt = txt + Text(NoteJudge.name(n.midi)).font(.system(size: gap * 0.3, weight: .semibold)).foregroundColor(ink.opacity(0.7))
+                }
+                let r = ctx.resolve(txt), sz = r.measure(in: CGSize(width: 200, height: 100))
+                let y = lineY(n.string)
+                ctx.fill(Path(CGRect(x: x - sz.width / 2 - 3, y: y - sz.height / 2, width: sz.width + 6, height: sz.height)), with: .color(paper))
+                ctx.draw(r, at: CGPoint(x: x, y: y))
             }
         }
     }
