@@ -1,5 +1,52 @@
 # MacTabs (was tabs-app) — handover log
 
+> ## 👂 GUITARSET BENCH BUILT, PLAY MODE NOW LISTENS WITH NOTEJUDGE + BASIC PITCH (2026-11-08, afternoon) — READ THIS FIRST
+>
+> **Goal:** a pitch judge trustworthy on Daniel's guitar, chords included, tuned on realistic simulations.
+>
+> **⚠️ UNCOMMITTED (master):** `research/2026-11-07-charts-from-video/` only, still held back (public vs private
+> undecided). Do NOT delete it. Everything else is committed and pushed (`9d20093`, `9e2eeeb`, `eeffbd2` + this block).
+>
+> **What shipped:**
+> - **Bench:** `tools/guitarset-bench.py prepare` turns GuitarSet (CC BY 4.0, 360 takes, hex-pickup notes) into charts +
+>   48 kHz "laptop mic" audio (4th-order HP 100–150 Hz, LP 8–12 kHz, small room, levels from Daniel's play logs:
+>   playing −36..−26 dBFS, room ≈ −68, mains hum 100/120 Hz + harmonics + hiss; seeded per take) in
+>   `~/Library/Caches/MacTabs/guitarset` (~2 GB, outside the repo). Players 00–03 = `laptop-tune.tsv`, 04–05 = `laptop-hold.tsv`.
+>   `pitchbench suite <manifest>` replays each take through the game's own wait-mode judging (arm, since, allowing,
+>   0.6 s lookahead) and counts **decoys** (the step ±1 semitone, ±1 octave) as false accepts; `--why` says which test
+>   stopped each missed note; `--live` runs the app's `Hearing`; `--post <dir> mode=1..5` runs Python-streamed posteriors
+>   (`tools/basicpitch-bench.py` → `bp-laptop/*.bp`); `probe <wav> <midi> <t0> <t1> <armed>` prints one note hop by hop.
+>   `tools/guitarset-bench.py tune [--hybrid]` is a coordinate search (objective in `score()`: mean hit over
+>   single/dyad/chord − decoys (−12 at ¼ weight) − 2×premature).
+> - **NoteJudge chord fix:** the overtone veto counted a chord's own notes as a lower note's harmonics (C3 E3 G3 = C2's series);
+>   now skipped (`made`). Veto factored out as `NoteJudge.overtone`. Chord options added (all off by default).
+> - **Hearing (the app's ear now):** `Sources/NoteJudge/{Hearing,NoteModel}.swift` + `Model/nmp.mlmodelc` (Basic Pitch,
+>   Apache-2.0, 272 KB, licence bundled). A note counts when Basic Pitch's note posterior ≥ 0.25 (frames ≥ 5 old) AND
+>   an onset shows (BP onset ≥ 0.4 or NoteJudge's onset test with `Config.hybrid`), and a single note is not an overtone.
+>   Model warms off-queue when play opens (`NoteModel.prepare`, first GPU/ANE run ~1.5 s); NoteJudge alone until then.
+>   `defaults write dev.danielslater.tabs play.ear judge` = old judge. Logs + `game` state record `ear` / `model`.
+>
+> **Numbers (held-out players 04–05, first pluck, single / dyad / chord):** morning judge 87 / 18 / 22 % →
+> NoteJudge alone now 87 / 33 / 39 % → **Hearing 94 / 65 / 74 %** (solo 98 %, comping 77 %); wrong fret 0–2.5 %,
+> overtone 0.4–4 %, premature 2.4–5 %; latency median 47 ms single / 77 ms chord (+ buffer). Real Für Elise: 98.9 %.
+> CPU: ~9 % of a core live on GPU/ANE (CPU-only CoreML is ~60 %, don't).
+>
+> **Findings worth keeping:** Basic Pitch's onset posterior needs 4–5 frames (~50 ms) after a frame to peak; younger
+> frames sit at a ~0.18 noise baseline and caused 20 %+ premature passes. Its onset head is weak on strums, its note head
+> is excellent on pitch identity: hence the hybrid. Remaining misses: funk chops (36 % of notes < 0.15 s) and repeated
+> same-pitch notes (some "premature" there is GuitarSet annotation ambiguity, checked by hand on two takes).
+>
+> **Open:** (1) Daniel's live test of the new ear (card on LeachieTok); compare `play.ear judge` if it feels worse.
+> (2) Card `mactabs-room-rec-1108`: may we record 10 s of his room (FIFO `record 10 <path>`) for the bench's noise? Unanswered.
+> (3) Research folder public vs private. (4) Plan step 3 (fine-tune on zulzi GPU) only if live chords still disappoint:
+> GuitarSet + augmentation, the onset head on strums is the target; export CoreML. (5) Later: aligner for band mixes, v0.3.0.
+>
+> **Gotchas:** `pitchbench suite --live` must stay ≤ 3 takes in parallel and each CoreML run needs `autoreleasepool`
+> (IOSurface exhaustion otherwise; both done). zsh: pass key=value pairs as separate words (`${=v}`).
+> The tuner calls `.build/release/pitchbench` unless `PITCHBENCH=` points at a pinned copy: rebuilding mid-tune changes it.
+> Every judge change: `pitchbench eval` on the real take, synth and hum=-35 (unchanged this session), plus
+> `pitchbench suite <elise manifest> --live`, then `make test` (38/38).
+
 > ## 🎸 LIVE PLAY TESTS DONE, JUDGE HARDENED → NEXT: GUITARSET SIMULATION BENCH + BASIC PITCH (2026-11-08) — READ THIS FIRST
 >
 > **Goal:** make the wait-mode pitch judge trustworthy on Daniel's real guitar, chords included, by
