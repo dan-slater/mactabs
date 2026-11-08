@@ -15,9 +15,9 @@ final class Listener {
     /// Called on the main queue.
     var onHit: ((Hit) -> Void)?
     /// What the judge hears right now (main queue, ~15 Hz): loudest pitched note and input level.
-    var onMeter: ((Int?, Float) -> Void)?
+    var onMeter: ((Int?, Float, Float?) -> Void)?
     /// Every pluck the judge picks out while waiting (main queue), for the session log.
-    var onStruck: (([Int], Int, Float) -> Void)?
+    var onStruck: (([Int], Int, Float, [Int]) -> Void)?
 
     private let q = DispatchQueue(label: "mactabs.listener", qos: .userInteractive)
     private var judge: NoteJudge?
@@ -138,15 +138,15 @@ final class Listener {
         let now = Self.now()
         if now - lastMeter > 0.066 {
             lastMeter = now
-            let heard = judge.loudest(), level = judge.rmsDB
-            DispatchQueue.main.async { [weak self] in self?.onMeter?(heard, level) }
+            let heard = judge.loudest(), level = judge.rmsDB, cents = heard.flatMap { judge.cents($0) }
+            DispatchQueue.main.async { [weak self] in self?.onMeter?(heard, level, cents) }
         }
         // Log plucks (any pitched onset) so the session can count tries per note.
         let struck = judge.struckNotes(since: since)
         if !struck.isEmpty && h - lastPluckHop > Int(0.09 * judge.fs) / judge.hopSize {
             lastPluckHop = h
-            let s = step, rms = judge.rmsDB
-            DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms) }
+            let s = step, rms = judge.rmsDB, cents = struck.map { Int(judge.cents($0) ?? 0) }
+            DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms, cents) }
         }
         guard step >= 0, !expected.isEmpty else { return }
         for p in expected.subtracting(got) where judge.struck(p, since: since, allowing: expected) { got.insert(p) }

@@ -10,6 +10,8 @@ final class Game: ObservableObject {
     @Published private(set) var chart: Chart?
     @Published private(set) var index = 0                 // the next step to play
     @Published private(set) var heard: Int?
+    /// How sharp/flat the heard note is (tuner readout).
+    @Published private(set) var cents: Float?
     @Published private(set) var level: Float = -120
     @Published private(set) var latencies: [Double] = []
     @Published private(set) var plucks = 0                // pitched onsets heard while playing
@@ -41,17 +43,18 @@ final class Game: ObservableObject {
 
     init() {
         listener.onHit = { [weak self] hit in self?.listened(hit) }
-        listener.onMeter = { [weak self] note, level in
+        listener.onMeter = { [weak self] note, level, cents in
             guard let self else { return }
             let now = Listener.now()
             if self.chart != nil, now - self.lastLevelLog > 1 { self.lastLevelLog = now; self.write(["event": "level", "rms_db": Int(level)]) }
             if self.heard != note { self.heard = note }
+            self.cents = cents
             self.level = level
         }
-        listener.onStruck = { [weak self] notes, step, rms in
+        listener.onStruck = { [weak self] notes, step, rms, cents in
             guard let self, self.chart != nil, !self.done else { return }
             self.plucks += 1
-            self.write(["event": "pluck", "notes": notes, "step": step, "rms_db": Int(rms)])
+            self.write(["event": "pluck", "notes": notes, "step": step, "rms_db": Int(rms), "cents": cents])
         }
     }
 
@@ -248,6 +251,11 @@ struct PlayView: View {
                     Image(systemName: "mic.fill").foregroundStyle(.red)
                     meter
                     Text(game.heard.map(NoteJudge.name) ?? "–").frame(width: 34, alignment: .leading)
+                    if game.heard != nil, let c = game.cents {
+                        Text(String(format: "%+.0f¢", c)).monospacedDigit().frame(width: 44, alignment: .leading)
+                            .foregroundStyle(abs(c) > 20 ? Color.orange : Color.secondary)
+                            .help("How far the note sits from in tune (cents). Over ±20 and the string wants tuning.")
+                    }
                 }
             } else {
                 Label("no mic", systemImage: "mic.slash").foregroundStyle(.secondary)

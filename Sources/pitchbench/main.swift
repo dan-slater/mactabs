@@ -36,6 +36,7 @@ func config(_ args: ArraySlice<String>) -> NoteJudge.Config {
         case "low": c.lowDB = Float(v)
         case "difflag": c.diffLagSec = v
         case "share": c.shareDB = Float(v)
+        case "repluck": c.repluckDB = Float(v)
         case "minrms": c.minRMSDB = Float(v)
         case "diffcontrast": c.diffContrastDB = Float(v)
         case "buried": c.buriedDB = Float(v)

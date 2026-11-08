@@ -23,7 +23,8 @@ public final class NoteJudge {
         public var shareDB: Float = 10     // the note's harmonics within this of the whole input (room hiss is spread thin)
         public var minRMSDB: Float = -60   // input quieter than this is never a note (dBFS)
         public var oddDB: Float = -14      // odd harmonics vs even ones (rejects "an octave too low")
-        public var partialDB: Float = 4    // a lower note this close in level explains this one away
+        public var partialDB: Float = -99  // a lower note this close in level explains this one away (off: open strings ring along)
+        public var repluckDB: Float = 2    // or an onset when this share of the note's energy is new (re-plucking a ringing string)
         public var diffContrastDB: Float = 11  // …and clear of the neighbours in the new energy by this
         public var buriedDB: Float = 6     // …while at most this far under the ringing neighbour
         public var diffLagSec = 0.08       // "new energy" = this spectrum minus the one this long ago
@@ -260,7 +261,8 @@ public final class NoteJudge {
         guard avail >= 1 else { return false }
         var lo = Float.infinity
         for a in 1...avail { lo = min(lo, at(k, ago: a)) }
-        guard now - lo >= c.riseDB else { return false }
+        let slot0 = (samples / hopSize) % depth
+        guard now - lo >= c.riseDB || newRow[k] - sharpHist[slot0][k] >= -c.repluckDB else { return false }
         // Clear of the semitones either side; or, when a neighbour is still ringing from the last
         // note, clear of it in the new energy alone (and not buried under it).
         let cont = contrast(k)
@@ -300,6 +302,26 @@ public final class NoteJudge {
             out.append(m)
         }
         return out
+    }
+
+    /// How far the sounding pitch sits from `midi` in equal temperament (cents, + = sharp), from the
+    /// stronger of harmonics 1–2 with a parabolic fit on the padded spectrum. Tells an out-of-tune string.
+    public func cents(_ midi: Int) -> Float? {
+        guard notes.contains(midi) else { return nil }
+        let f0 = NoteJudge.hz(midi)
+        var best: (Double, Float)? = nil
+        for h in 1...2 {
+            let b = f0 * Double(h) * Double(nfft) / fs
+            let lo = max(1, Int(b * 0.97)), hi = min(nfft / 2 - 2, Int(b * 1.03) + 1)
+            guard lo < hi else { continue }
+            var k = lo
+            for i in lo...hi where power[i] > power[k] { k = i }
+            let a = log(power[k - 1] + 1e-20), m = log(power[k] + 1e-20), c = log(power[k + 1] + 1e-20)
+            let d = (a - 2 * m + c) == 0 ? 0 : 0.5 * (a - c) / (a - 2 * m + c)
+            let f = (Double(k) + Double(d)) * fs / Double(nfft) / Double(h)
+            if best == nil || power[k] > best!.1 { best = (f, power[k]) }
+        }
+        return best.map { Float(1200 * log2($0.0 / f0)) }
     }
 
     /// The loudest clearly pitched note right now, struck or ringing (for the tuner-style readout).
