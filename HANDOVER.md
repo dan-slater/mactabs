@@ -1,5 +1,36 @@
 # MacTabs (was tabs-app) — handover log
 
+> ## 🎸 CLOSED 2026-11-08 (evening): SIDEWAYS TAB BY DEFAULT, CAPO HANDLING, SILENCE GATE — READ THIS + THE BLOCK BELOW
+>
+> **Goal:** the play-mode ear (NoteJudge + Basic Pitch, block below) proven on Daniel's guitar; then v0.3.0.
+>
+> **⚠️ UNCOMMITTED (master):** `research/2026-11-07-charts-from-video/` only. Keep it (public vs private undecided).
+> Everything else committed and pushed; HEAD == origin `69fe84c` + this block.
+>
+> **What shipped after the block below:**
+> - `ad5f2a7` Daniel: falling lanes confuse → **Tab strip (sideways) is the default**; Design switcher (⌘,) Highway =
+>   Tab strip | Printed tab | Printed, centred | Falling lanes. His saved `design.highway` was "Falling lanes"; set to
+>   "Tab strip" with `defaults write`. He has not picked yet: bake his pick in, delete the fork.
+> - `69fe84c` **Capo**: Sparks (capo 1) never passed chord 1 because he played open Am (log: A2 in tune, a semitone under
+>   the expected A#2…F4). Header shows "capo N · c"; the Listener listens for the step a capo lower and the game says
+>   "that sounded 1 fret low: no capo on? press c"; `c` / FIFO `capo` toggles. `Chart.capo` (+ JSON "capo").
+> - Same commit: **Basic Pitch hallucinates in silence** (note 0.9 on zeros; it normalises input) → Hearing needs
+>   NoteJudge's gate + share too (bench mode=6, −0.5 point). Feeder race fixed (a new `feed` stops the old thread).
+>   `make test` 42/42 (new capo test). README hold-out numbers (94/65/74) predate the gate: a `suite --live` re-run was
+>   in flight at close; re-run and update README + `Hearing.swift` doc if they moved by more than a point.
+>
+> **Blockers:** none. **Waiting on Daniel:** live test of the ear (card `mactabs-hybrid-ear-1108`), room recording
+> (card `mactabs-room-rec-1108`), highway layout pick, research folder public/private.
+>
+> **Gotchas:** his Sparks session played at −50..−57 dBFS (quieter than the morning's −30..−50): closer to the mic.
+> Basic Pitch output is meaningless without real signal: never drop the level gate. UI asks: options behind the
+> Design switcher, `make reload`, no screenshot loop (CLAUDE.md).
+>
+> **Pointers:** `Sources/NoteJudge/{Hearing,NoteModel,NoteJudge,Chart}.swift`, `Sources/MacTabs/{Game,Listener}.swift`,
+> `tools/guitarset-bench.py`, `tools/basicpitch-bench.py`, play logs `~/Library/Logs/MacTabs/play-*.jsonl`.
+>
+> Next: sessions/mactabs.md, session 2026-11-09-ear (Mon 9 Nov)
+
 > ## 👂 GUITARSET BENCH BUILT, PLAY MODE NOW LISTENS WITH NOTEJUDGE + BASIC PITCH (2026-11-08, afternoon) — READ THIS FIRST
 >
 > **Goal:** a pitch judge trustworthy on Daniel's guitar, chords included, tuned on realistic simulations.
