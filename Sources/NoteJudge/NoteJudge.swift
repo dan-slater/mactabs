@@ -22,6 +22,8 @@ public final class NoteJudge {
         public var gateDB: Float = 22      // above the noise floor
         public var shareDB: Float = 10     // the note's harmonics within this of the whole input (room hiss is spread thin)
         public var minRMSDB: Float = -60   // input quieter than this is never a note (dBFS)
+        public var noiseRiseDBps: Float = 3 // learned noise profile: each bin's floor creeps up this fast, drops at once
+        public var noiseOver: Float = 2    // subtract this many times the learned floor (hum, hiss, fan)
         public var oddDB: Float = -14      // odd harmonics vs even ones (rejects "an octave too low")
         public var lowerRiseDB: Float = 3  // …and that lower note got louder just now (not a bass note left ringing)
         public var uniqueDB: Float = 8     // a lower note struck now whose OWN harmonics (ones this note lacks) sound within this explains it away
@@ -29,6 +31,8 @@ public final class NoteJudge {
         public var diffContrastDB: Float = 11  // …and clear of the neighbours in the new energy by this
         public var buriedDB: Float = 6     // …while at most this far under the ringing neighbour
         public var diffLagSec = 0.08       // "new energy" = this spectrum minus the one this long ago
+        public var chordContrastDB: Float = 1  // in a chord of 3+ notes the others' overtones crowd the neighbours: ask less
+        public var chordLowDB: Float = 14      // …and of the bottom harmonics
         public var lowDB: Float = 8        // harmonic 1 or 2 within this of the strongest (rejects ghosts below)
         public init() {}
     }
@@ -72,6 +76,8 @@ public final class NoteJudge {
     var newRow: [Float] = []
     var pastPower: [[Float]] = []
     var pastPos = 0
+    /// Learned noise power per bin (steady hum and hiss), subtracted from every spectrum.
+    var noise: [Float] = []
     /// This hop's power per note and harmonic (scaled), for the explained-away test.
     var harm: [[Float]] = []
     /// Input level history (dB), for the re-pluck rule.
@@ -123,6 +129,7 @@ public final class NoteJudge {
         let lagHops = max(1, Int(config.diffLagSec / (Double(hopSize) / sampleRate)))
         pastPower = Array(repeating: [Float](repeating: 0, count: nfft / 2), count: lagHops)
         newRow = [Float](repeating: -200, count: count)
+        noise = [Float](repeating: -1, count: nfft / 2)
         harm = Array(repeating: Array(repeating: 0, count: config.harmonics), count: count)
         rmsHist = Array(repeating: -120, count: depth)
         weights = (1...config.harmonics).map { Float(pow(0.85, Double($0 - 1))) }
@@ -181,6 +188,14 @@ public final class NoteJudge {
                 }
             }
         }
+        // Learned noise profile: each bin follows its own quiet level (down at once, up slowly),
+        // so a steady hum or fan is measured and taken out while plucks pass through.
+        let creep = powf(10, config.noiseRiseDBps * Float(hopSize) / Float(fs) / 10)
+        for b in 0..<(nfft / 2) {
+            let p = power[b]
+            if noise[b] < 0 || p < noise[b] { noise[b] = p } else { noise[b] *= creep }
+            power[b] = max(0, p - config.noiseOver * noise[b])
+        }
         // Normalise so a full-scale sine reads about 0 dB.
         let scale = 1 / Float(windowSize * windowSize) * 4
 
@@ -237,9 +252,9 @@ public final class NoteJudge {
     }
 
     /// Could this note be what is sounding (not a ghost below it, not an octave too low)?
-    private func pitched(_ k: Int) -> Bool {
+    private func pitched(_ k: Int, chord: Bool = false) -> Bool {
         let slot = (samples / hopSize) % depth
-        return lowHist[slot][k] >= -config.lowDB && oddHist[slot][k] - evenHist[slot][k] >= config.oddDB
+        return lowHist[slot][k] >= -(chord ? config.chordLowDB : config.lowDB) && oddHist[slot][k] - evenHist[slot][k] >= config.oddDB
     }
 
     /// The judge's tests for one note in the newest hop (for the bench's diagnosis).
@@ -280,7 +295,15 @@ public final class NoteJudge {
         guard let k = idx(midi) else { return false }
         let c = config
         let now = at(k)
-        guard now >= floorDB + c.gateDB, rmsDB >= c.minRMSDB, now >= rmsDB - c.shareDB else { return false }
+        // Share: this note's harmonics (or, in a chord, all the chord's notes together) carry a real
+        // part of everything the mic hears; room hiss is spread thin.
+        var chordLevel = now
+        if allowing.count > 1 {
+            var sum: Float = 0
+            for m in allowing { if let j = idx(m) { sum += powf(10, at(j) / 10) } }
+            chordLevel = 10 * log10(sum + 1e-14)
+        }
+        guard now >= floorDB + c.gateDB, rmsDB >= c.minRMSDB, chordLevel >= rmsDB - c.shareDB else { return false }
         // Onset: a jump over the note's own recent minimum.
         let back = Int(c.riseSec * fs / Double(hopSize))
         let avail = min(back, hop - since, depth - 1)
@@ -296,12 +319,13 @@ public final class NoteJudge {
         guard now - lo >= c.riseDB || replucked else { return false }
         // Clear of the semitones either side; or, when a neighbour is still ringing from the last
         // note, clear of it in the new energy alone (and not buried under it).
+        let chord = allowing.count >= 3
         let cont = contrast(k)
-        if cont < c.contrastDB {
+        if cont < (chord ? c.chordContrastDB : c.contrastDB) {
             guard cont > -c.buriedDB, diffContrast(k) >= c.diffContrastDB else { return false }
         }
         // Its bottom harmonics sound and its odd ones too: not a ghost, not an octave too low.
-        guard pitched(k) else { return false }
+        guard pitched(k, chord: chord) else { return false }
         // Not an upper partial (octave, twelfth, two octaves) of a lower note that was just plucked.
         // A plucked low note also sounds harmonics this note cannot explain (G#2 rings at G#3,
         // which D#4 never makes); an open string ringing along, or the body's hum, does not.

@@ -32,6 +32,9 @@ func config(_ args: ArraySlice<String>) -> NoteJudge.Config {
         case "odd": c.oddDB = Float(v)
         case "unique": c.uniqueDB = Float(v)
         case "lowerrise": c.lowerRiseDB = Float(v)
+        case "noiseover": c.noiseOver = Float(v)
+        case "chordcontrast": c.chordContrastDB = Float(v)
+        case "chordlow": c.chordLowDB = Float(v)
         case "window": c.windowSec = v
         case "risesec": c.riseSec = v
         case "low": c.lowDB = Float(v)
@@ -72,8 +75,19 @@ func lag(_ rec: [Float], _ fr: Double, _ src: [Float], _ fs: Double, maxLag: Dou
 }
 
 func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool) throws {
-    let (x, fs) = try readMono(audio)
+    var (x, fs) = try readMono(audio)
     var chart = try Chart(url: chartURL)
+    // hum=<dB re the take's peak>: add 100 Hz mains hum with harmonics + hiss (a room like Daniel's).
+    if let h = CommandLine.arguments.first(where: { $0.hasPrefix("hum=") }), let db = Double(h.dropFirst(4)) {
+        let peak = x.map(abs).max() ?? 1, amp = Float(pow(10, db / 20)) * peak
+        var rng = Seeded(seed: 3)
+        for i in x.indices {
+            let t = Double(i) / fs
+            var v: Float = 0
+            for (k, w) in [(1, 1.0), (2, 0.7), (3, 0.4), (4, 0.5), (6, 0.2)] { v += Float(w * sin(2 * .pi * 100 * Double(k) * t)) }
+            x[i] += amp * v + amp * 0.3 * (Float(rng.next() % 2000) / 1000 - 1)
+        }
+    }
     if let i = CommandLine.arguments.firstIndex(of: "--align"), i + 1 < CommandLine.arguments.count {
         let (src, sr) = try readMono(URL(fileURLWithPath: CommandLine.arguments[i + 1]))
         let d = lag(x, fs, src, sr)
@@ -102,6 +116,10 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
         }
         var hits: [Int] = []
         for m in queried where judge.struck(m) { hits.append(m) }
+        // Chord notes are judged with their chord, as the app does.
+        for s in steps where s.pitches.count >= 3 && abs(judge.time(ofHop: h) - s.time - 0.1) < 0.2 {
+            for m in s.required where !hits.contains(m) && judge.struck(m, allowing: s.pitches) { hits.append(m) }
+        }
         if !hits.isEmpty { struckAt[h] = hits }
     }
     judge.process(x)
@@ -114,7 +132,7 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
     var hit = 0, lat: [Double] = [], prem = 0, premN = 0, wrong = 0, wrongN = 0, near = 0, nearN = 0
     for (i, s) in steps.enumerated() {
         let end = min(s.time + 0.35, i + 1 < steps.count ? steps[i + 1].time - 0.02 : s.time + 0.35)
-        var need = s.pitches, last: Int? = nil
+        var need = s.required, last: Int? = nil   // as the app judges: a big chord passes on its lowest + highest
         for h in hops(s.time - 0.06, end) {
             guard let got = struckAt[h] else { continue }
             for p in need where got.contains(p) { need.remove(p); last = h }
@@ -222,6 +240,12 @@ do {
         }
         guard let c = Chart.fromTab(text, title: meta("title") ?? "", artist: meta("artist") ?? "", tuning: meta("tuning"), capo: Int(meta("capo") ?? "") ?? 0)
         else { print("no staves"); exit(1) }
+        if let j = a.firstIndex(of: "--json"), j + 1 < a.count {
+            // Untimed chart for tools/align-chart.py: times are only the tab's column spacing.
+            let notes = c.steps.flatMap { s in s.notes.map { ["t": s.time, "string": $0.string, "fret": $0.fret, "midi": $0.midi] as [String: Any] } }
+            let obj: [String: Any] = ["title": c.title, "artist": c.artist, "timing": "tab columns", "notes": notes]
+            try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]).write(to: URL(fileURLWithPath: a[j + 1]))
+        }
         print("\(c.steps.count) steps, \(String(format: "%.0f", c.duration)) s")
         for s in c.steps.prefix(a.count > 3 ? Int(a[3]) ?? 16 : 16) {
             print(String(format: "%6.2f  ", s.time) + s.notes.map { "s\($0.string)f\($0.fret)=\(NoteJudge.name($0.midi))" }.joined(separator: " "))

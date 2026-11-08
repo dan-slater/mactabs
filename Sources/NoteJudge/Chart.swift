@@ -81,6 +81,14 @@ public struct Chart {
             guard block.allSatisfy({ $0 != nil }) else { i += 1; continue }
             let rows = block.map { $0! }
             let width = rows.map(\.count).max() ?? 0
+            // "(x4)" / "x2" after the block's last bar line: play the block that many times.
+            let rep = lines[i..<(i + 6)].compactMap { l -> Int? in
+                guard let bar = l.lastIndex(of: "|") else { return nil }
+                let tail = l[l.index(after: bar)...].lowercased()
+                guard let r = tail.range(of: #"x\s*([2-9])"#, options: .regularExpression) else { return nil }
+                return Int(tail[r].filter(\.isNumber))
+            }.max() ?? 1
+            for _ in 0..<rep {
             var skip = Array(repeating: -1, count: 6)
             for c in 0..<width {
                 var notes: [Note] = []
@@ -95,6 +103,7 @@ public struct Chart {
                 if !notes.isEmpty { cols.append((base + c, notes)) }
             }
             base += width + 8
+            }
             i += 6
         }
         guard cols.count >= 2 else { return nil }
