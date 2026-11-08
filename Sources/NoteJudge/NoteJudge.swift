@@ -317,11 +317,16 @@ public final class NoteJudge {
             var k = lo
             for i in lo...hi where power[i] > power[k] { k = i }
             let a = log(power[k - 1] + 1e-20), m = log(power[k] + 1e-20), c = log(power[k + 1] + 1e-20)
-            let d = (a - 2 * m + c) == 0 ? 0 : 0.5 * (a - c) / (a - 2 * m + c)
+            guard power[k] > 0 else { continue }
+            let den = a - 2 * m + c
+            let d = den.isFinite && abs(den) > 1e-9 ? max(-1, min(1, 0.5 * (a - c) / den)) : 0
             let f = (Double(k) + Double(d)) * fs / Double(nfft) / Double(h)
+            guard f.isFinite, f > 0 else { continue }
             if best == nil || power[k] > best!.1 { best = (f, power[k]) }
         }
-        return best.map { Float(1200 * log2($0.0 / f0)) }
+        guard let b = best else { return nil }
+        let c = Float(1200 * log2(b.0 / f0))
+        return c.isFinite ? c : nil
     }
 
     /// The loudest clearly pitched note right now, struck or ringing (for the tuner-style readout).

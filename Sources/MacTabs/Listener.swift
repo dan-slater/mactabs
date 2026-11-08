@@ -145,7 +145,10 @@ final class Listener {
         let struck = judge.struckNotes(since: since)
         if !struck.isEmpty && h - lastPluckHop > Int(0.09 * judge.fs) / judge.hopSize {
             lastPluckHop = h
-            let s = step, rms = judge.rmsDB, cents = struck.map { Int(judge.cents($0) ?? 0) }
+            let s = step, rms = judge.rmsDB, cents = struck.map { m -> Int in
+                let c = judge.cents(m) ?? 0
+                return c.isFinite ? Int(c.rounded()) : 0
+            }
             DispatchQueue.main.async { [weak self] in self?.onStruck?(struck, s, rms, cents) }
         }
         guard step >= 0, !expected.isEmpty else { return }

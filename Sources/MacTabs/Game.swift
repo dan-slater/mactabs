@@ -46,7 +46,7 @@ final class Game: ObservableObject {
         listener.onMeter = { [weak self] note, level, cents in
             guard let self else { return }
             let now = Listener.now()
-            if self.chart != nil, now - self.lastLevelLog > 1 { self.lastLevelLog = now; self.write(["event": "level", "rms_db": Int(level)]) }
+            if self.chart != nil, now - self.lastLevelLog > 1 { self.lastLevelLog = now; self.write(["event": "level", "rms_db": level.isFinite ? Int(level) : -120]) }
             if self.heard != note { self.heard = note }
             self.cents = cents
             self.level = level
@@ -54,7 +54,7 @@ final class Game: ObservableObject {
         listener.onStruck = { [weak self] notes, step, rms, cents in
             guard let self, self.chart != nil, !self.done else { return }
             self.plucks += 1
-            self.write(["event": "pluck", "notes": notes, "step": step, "rms_db": Int(rms), "cents": cents])
+            self.write(["event": "pluck", "notes": notes, "step": step, "rms_db": rms.isFinite ? Int(rms) : -120, "cents": cents])
         }
     }
 
