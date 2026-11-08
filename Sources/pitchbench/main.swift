@@ -30,7 +30,8 @@ func config(_ args: ArraySlice<String>) -> NoteJudge.Config {
         case "contrast": c.contrastDB = Float(v)
         case "gate": c.gateDB = Float(v)
         case "odd": c.oddDB = Float(v)
-        case "partial": c.partialDB = Float(v)
+        case "unique": c.uniqueDB = Float(v)
+        case "lowerrise": c.lowerRiseDB = Float(v)
         case "window": c.windowSec = v
         case "risesec": c.riseSec = v
         case "low": c.lowDB = Float(v)
@@ -85,11 +86,20 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
     let hopT = Double(judge.hopSize) / fs
     // Record, per hop, which of the queried notes are struck.
     var queried = allPitches
-    for s in steps { for p in s.pitches { for d in [-2, -1, 1, 2] { queried.insert(p + d) } } }
+    for s in steps { for p in s.pitches { for d in [-2, -1, 1, 2, 12, 19, 24] { queried.insert(p + d) } } }
     var struckAt: [Int: [Int]] = [:]          // hop -> notes struck (since = 0 style: plain rise)
     var feats: [Int: [Int: [String: Float]]] = [:]   // hop -> note -> features (chart pitches only)
     judge.onHop = { h in
         if verbose { var f: [Int: [String: Float]] = [:]; for m in allPitches { f[m] = judge.features(m) }; feats[h] = f }
+        if CommandLine.arguments.contains("-o") {
+            for s in steps where abs(judge.time(ofHop: h) - s.time - 0.05) < 0.12 {
+                for p in s.pitches { for d in [12, 19, 24] where !s.pitches.contains(p + d) && judge.struck(p + d) {
+                    let v = judge.vetoInfo(p + d)[d] ?? []
+                    print(String(format: "%6.2f  %@ played, %@ (+%d) fired; lower: own-now %.0f rise %.0f contrast %.0f", judge.time(ofHop: h),
+                                 NoteJudge.name(p), NoteJudge.name(p + d), d, v[0], v[1], v[2]))
+                } }
+            }
+        }
         var hits: [Int] = []
         for m in queried where judge.struck(m) { hits.append(m) }
         if !hits.isEmpty { struckAt[h] = hits }
@@ -100,7 +110,7 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
         let lo = max(0, Int((a / hopT).rounded(.up))), hi = Int(b / hopT)
         return lo <= hi ? Array(lo...hi) : []
     }
-    var wrongBy: [Int: Int] = [:], nearAdj = 0
+    var wrongBy: [Int: Int] = [:], nearAdj = 0, part = 0, partN = 0
     var hit = 0, lat: [Double] = [], prem = 0, premN = 0, wrong = 0, wrongN = 0, near = 0, nearN = 0
     for (i, s) in steps.enumerated() {
         let end = min(s.time + 0.35, i + 1 < steps.count ? steps[i + 1].time - 0.02 : s.time + 0.35)
@@ -121,14 +131,18 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
                 if verbose { print(String(format: "        premature: %@ fired at %.2f (step at %.2f)", s.pitches.map(NoteJudge.name).joined(separator: "+"), judge.time(ofHop: h), s.time)) }
             }
         }
+        let nearby = Set(steps.filter { abs($0.time - s.time) < 0.8 }.flatMap { $0.pitches })
         // Wrong notes: chart pitches not in this step (ignoring octaves of it), and ±1/±2 semitones.
         let win = hops(s.time - 0.06, end)
         let fired = Set(win.flatMap { struckAt[$0] ?? [] })
         // Only pitches not sounding nearby in the chart (so a ringing arpeggio note is not "wrong").
-        let nearby = Set(steps.filter { abs($0.time - s.time) < 0.8 }.flatMap { $0.pitches })
         for p in allPitches where !nearby.contains(p) && !s.pitches.contains(where: { abs($0 - p) % 12 == 0 }) {
             wrongN += 1; if fired.contains(p) { wrong += 1; wrongBy[(p - s.notes.map(\.midi).max()!), default: 0] += 1 }
         }
+        // Upper partials: the octave, twelfth and two octaves above this step's notes.
+        for p in s.pitches { for d in [12, 19, 24] where !s.pitches.contains(p + d) && !nearby.contains(p + d) {
+            partN += 1; if fired.contains(p + d) { part += 1 }
+        } }
         let adjacent = Set((max(0, i - 1)...min(steps.count - 1, i + 1)).flatMap { steps[$0].pitches })
         for p in s.pitches { for d in [-2, -1, 1, 2] where !s.pitches.contains(p + d) {
             nearN += 1
@@ -151,8 +165,8 @@ func eval(_ audio: URL, _ chartURL: URL, _ cfg: NoteJudge.Config, verbose: Bool)
         }
     }
     if CommandLine.arguments.contains("-q") {
-        print(String(format: "hit %.1f%%  lat %.0f/%.0f ms  premature %.1f%%  wrong %.1f%%  near %.1f%% (%d of %d are the previous/next note)", 100 * Double(hit) / Double(steps.count),
-                     median(lat) * 1000, p90(lat) * 1000, 100 * Double(prem) / Double(max(1, premN)), 100 * Double(wrong) / Double(max(1, wrongN)), 100 * Double(near) / Double(max(1, nearN)), nearAdj, near))
+        print(String(format: "hit %.1f%%  lat %.0f/%.0f ms  premature %.1f%%  wrong %.1f%%  near %.1f%% (%d of %d adj)  overtone %.1f%%", 100 * Double(hit) / Double(steps.count),
+                     median(lat) * 1000, p90(lat) * 1000, 100 * Double(prem) / Double(max(1, premN)), 100 * Double(wrong) / Double(max(1, wrongN)), 100 * Double(near) / Double(max(1, nearN)), nearAdj, near, 100 * Double(part) / Double(max(1, partN))))
         return
     }
     print("audio \(audio.lastPathComponent)  \(String(format: "%.0f", fs)) Hz  window \(judge.windowSize)  hop \(String(format: "%.1f", hopT * 1000)) ms")

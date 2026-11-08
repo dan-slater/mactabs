@@ -23,7 +23,8 @@ public final class NoteJudge {
         public var shareDB: Float = 10     // the note's harmonics within this of the whole input (room hiss is spread thin)
         public var minRMSDB: Float = -60   // input quieter than this is never a note (dBFS)
         public var oddDB: Float = -14      // odd harmonics vs even ones (rejects "an octave too low")
-        public var partialDB: Float = -99  // a lower note this close in level explains this one away (off: open strings ring along)
+        public var lowerRiseDB: Float = 3  // …and that lower note got louder just now (not a bass note left ringing)
+        public var uniqueDB: Float = 8     // a lower note struck now whose OWN harmonics (ones this note lacks) sound within this explains it away
         public var repluckDB: Float = 2    // or an onset when this share of the note's energy is new (re-plucking a ringing string)
         public var diffContrastDB: Float = 11  // …and clear of the neighbours in the new energy by this
         public var buriedDB: Float = 6     // …while at most this far under the ringing neighbour
@@ -71,6 +72,10 @@ public final class NoteJudge {
     var newRow: [Float] = []
     var pastPower: [[Float]] = []
     var pastPos = 0
+    /// This hop's power per note and harmonic (scaled), for the explained-away test.
+    var harm: [[Float]] = []
+    /// Input level history (dB), for the re-pluck rule.
+    var rmsHist: [Float] = []
     /// Per note, which harmonics are resolved from the semitone neighbours.
     var resolved: [[Bool]] = []
 
@@ -118,6 +123,8 @@ public final class NoteJudge {
         let lagHops = max(1, Int(config.diffLagSec / (Double(hopSize) / sampleRate)))
         pastPower = Array(repeating: [Float](repeating: 0, count: nfft / 2), count: lagHops)
         newRow = [Float](repeating: -200, count: count)
+        harm = Array(repeating: Array(repeating: 0, count: config.harmonics), count: count)
+        rmsHist = Array(repeating: -120, count: depth)
         weights = (1...config.harmonics).map { Float(pow(0.85, Double($0 - 1))) }
     }
 
@@ -157,6 +164,7 @@ public final class NoteJudge {
         var ms: Float = 0
         ring.withUnsafeBufferPointer { vDSP_measqv($0.baseAddress!, 1, &ms, vDSP_Length(windowSize)) }
         rmsDB = 10 * log10(ms + 1e-12)
+        rmsHist[(samples / hopSize) % depth] = rmsDB
 
         re.withUnsafeMutableBufferPointer { rp in
             im.withUnsafeMutableBufferPointer { ip in
@@ -184,6 +192,7 @@ public final class NoteJudge {
                 var p: Float = 0
                 for b in lo...hi where power[b] > p { p = power[b] }
                 p *= scale
+                harm[k][h] = p
                 sum += weights[h] * p
                 if h % 2 == 0 { so += p } else { se += p }
                 if h < 2 { pl = max(pl, p) }
@@ -244,6 +253,23 @@ public final class NoteJudge {
                 "low": lowHist[slot][k], "odd": oddHist[slot][k] - evenHist[slot][k]]
     }
 
+    /// Why an upper partial was not explained away (bench debugging): per lower note d, [own-now, rise, contrast].
+    public func vetoInfo(_ midi: Int) -> [Int: [Float]] {
+        guard let k = idx(midi) else { return [:] }
+        let now = at(k)
+        let avail = min(Int(config.riseSec * fs / Double(hopSize)), hop, depth - 1)
+        var out: [Int: [Float]] = [:]
+        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] {
+            guard let j = idx(midi - d) else { continue }
+            var own: Float = 0
+            for h in 2...config.harmonics where h % ratio != 0 { own += weights[h - 1] * harm[j][h - 1] }
+            var jlo = Float.infinity
+            for a in 1...max(1, avail) { jlo = min(jlo, at(j, ago: a)) }
+            out[d] = [10 * log10(own + 1e-14) - now, at(j) - jlo, contrast(j)]
+        }
+        return out
+    }
+
     /// Level of a note in the newest hop, dB.
     public func level(_ midi: Int) -> Float { idx(midi).map { at($0) } ?? -200 }
 
@@ -262,7 +288,12 @@ public final class NoteJudge {
         var lo = Float.infinity
         for a in 1...avail { lo = min(lo, at(k, ago: a)) }
         let slot0 = (samples / hopSize) % depth
-        guard now - lo >= c.riseDB || newRow[k] - sharpHist[slot0][k] >= -c.repluckDB else { return false }
+        // Re-pluck of a ringing note: most of its energy is new AND the input as a whole got louder
+        // (a decaying string in a quiet room otherwise "re-plucks" on noise).
+        var rmsLo = Float.infinity
+        for a in 1...avail { rmsLo = min(rmsLo, rmsHist[(slot0 - a + depth * 4) % depth]) }
+        let replucked = newRow[k] - sharpHist[slot0][k] >= -c.repluckDB && rmsDB - rmsLo >= 3
+        guard now - lo >= c.riseDB || replucked else { return false }
         // Clear of the semitones either side; or, when a neighbour is still ringing from the last
         // note, clear of it in the new energy alone (and not buried under it).
         let cont = contrast(k)
@@ -271,11 +302,18 @@ public final class NoteJudge {
         }
         // Its bottom harmonics sound and its odd ones too: not a ghost, not an octave too low.
         guard pitched(k) else { return false }
-        // Not an upper partial (octave, twelfth, two octaves) of a lower note sounding as loud.
-        for d in [12, 19, 24] {
+        // Not an upper partial (octave, twelfth, two octaves) of a lower note that was just plucked.
+        // A plucked low note also sounds harmonics this note cannot explain (G#2 rings at G#3,
+        // which D#4 never makes); an open string ringing along, or the body's hum, does not.
+        for (d, ratio) in [(12, 2), (19, 3), (24, 4)] {
             let lowNote = midi - d
             guard let j = idx(lowNote), !allowing.contains(lowNote) else { continue }
-            if at(j) >= now - c.partialDB && pitched(j) && contrast(j) >= c.contrastDB { return false }
+            var own: Float = 0
+            for h in 2...config.harmonics where h % ratio != 0 { own += weights[h - 1] * harm[j][h - 1] }
+            let ownDB = 10 * log10(own + 1e-14)
+            var jlo = Float.infinity
+            for a in 1...avail { jlo = min(jlo, at(j, ago: a)) }
+            if ownDB >= now - c.uniqueDB && at(j) - jlo >= c.lowerRiseDB { return false }
         }
         return true
     }
