@@ -96,7 +96,7 @@ per-string annotations, played through a bass roll-off, a small room and mains h
 
 | first pluck heard | single notes | two-note steps | chords | wrong fret accepted | overtone accepted |
 | --- | --- | --- | --- | --- | --- |
-| NoteJudge + Basic Pitch (default) | 94% | 65% | 74% | 0–2.5% | 0.4–4% |
+| NoteJudge + Basic Pitch (default) | 93% | 65% | 73% | 0–2.5% | 0.4–4% |
 | NoteJudge alone | 87% | 33% | 39% | 0.2–4% | 0.5–6% |
 
 Median latency is 47 ms for a single note and 77 ms for a chord (analysis only; add the audio

@@ -16,8 +16,8 @@
 >   "that sounded 1 fret low: no capo on? press c"; `c` / FIFO `capo` toggles. `Chart.capo` (+ JSON "capo").
 > - Same commit: **Basic Pitch hallucinates in silence** (note 0.9 on zeros; it normalises input) → Hearing needs
 >   NoteJudge's gate + share too (bench mode=6, −0.5 point). Feeder race fixed (a new `feed` stops the old thread).
->   `make test` 42/42 (new capo test). README hold-out numbers (94/65/74) predate the gate: a `suite --live` re-run was
->   in flight at close; re-run and update README + `Hearing.swift` doc if they moved by more than a point.
+>   `make test` 42/42 (new capo test). Hold-out re-run with the gate: 92.8 / 64.8 / 73.2 % (premature 2–4 %);
+>   README + `Hearing.swift` updated to 93 / 65 / 73.
 >
 > **Blockers:** none. **Waiting on Daniel:** live test of the ear (card `mactabs-hybrid-ear-1108`), room recording
 > (card `mactabs-room-rec-1108`), highway layout pick, research folder public/private.

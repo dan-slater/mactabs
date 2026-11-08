@@ -10,7 +10,7 @@ import Foundation
 /// Without the model it is NoteJudge alone, with its own defaults.
 ///
 /// GuitarSet laptop-mic bench, 2026-11-08, held-out players 04–05, first-pluck hit for single /
-/// dyad / chord steps: Hearing 94 / 65 / 74 %, NoteJudge alone 87 / 33 / 39 %; wrong-fret accepts
+/// dyad / chord steps: Hearing 93 / 65 / 73 %, NoteJudge alone 87 / 33 / 39 %; wrong-fret accepts
 /// 0–2.5 % vs 0.2–4 % (`pitchbench suite <manifest> --live`).
 public final class Hearing {
     public let judge: NoteJudge
