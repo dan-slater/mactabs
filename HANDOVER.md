@@ -1,5 +1,63 @@
 # MacTabs (was tabs-app) — handover log
 
+> ## 🎸 LIVE PLAY TESTS DONE, JUDGE HARDENED → NEXT: GUITARSET SIMULATION BENCH + BASIC PITCH (2026-11-08) — READ THIS FIRST
+>
+> **Goal:** make the wait-mode pitch judge trustworthy on Daniel's real guitar, chords included, by
+> tuning against realistic simulations (and, if needed, a trained model) instead of by hand.
+>
+> **⚠️ UNCOMMITTED (master):** `research/2026-11-07-charts-from-video/` only, held back on purpose
+> (public vs private still undecided). Do NOT delete it. Everything else is committed and pushed; HEAD == origin.
+>
+> **What shipped this session (after `f5bb51a`, all on master):**
+> - `9ac088e` room-hiss gates (harmonic share + min level) · `99d2234` overtone veto off, re-pluck rule, cents readout ·
+>   `50ffe2f` NaN crash fix (cents → Int on the listener queue) · `9d0877a` **play any tab from its own staves**
+>   (`g` / gamecontroller icon; `Chart.fromTab`, tuning + capo applied; 3+ note chords pass on lowest + highest) ·
+>   `c474984` smarter overtone veto (a lower note explains the expected one away only when its OWN harmonics sound and
+>   it just got louder) · `dd8c92a` learned per-bin noise profile (100 Hz mains hum), chord-aware gates, `(xN)` repeat
+>   expansion, `tools/align-chart.py` (tab ↔ recording alignment), pitchbench `hum=`, overtone metric, `tabchart --json`.
+> - Bench now (real Für Elise take): 85% first-pluck, ~40 ms analysis latency, overtone false accepts 7%, wrong 1.3%.
+>   Synthetic Fly Me To The Moon (jazz chords) + hum: only 69%. **Chords are the weak spot.**
+>
+> **Daniel's live findings (logs in `~/Library/Logs/MacTabs/play-*.jsonl`):** (1) room noise advanced the highway (fixed);
+> (2) re-plucks of the same note under ringing open strings were missed (fixed); (3) after that, overtones of a played
+> low note were accepted, e.g. G#2 → G#4/D#4 (fixed, smarter veto); (4) Fly Me To The Moon chords barely register
+> (partly fixed); (5) his room shows constant G#2/G#3/G#4 ≈ 100 Hz mains hum + harmonics (noise profile added, unverified live).
+>
+> **Song timing (tabs carry no rhythm):** tab-line songs play with column spacing (0.3–1 s per step). The aligner
+> works on Für Elise (median 12 ms; first 10 notes 90% within 150 ms; the old chart is wrong at 6–16 s, the aligner right)
+> but fails on full-band mixes: well-matched steps Down By The River 67%, Ode To Joy (some guitar video) 42%,
+> Cough Syrup 23%, Cayman Islands / Wish You Were Here 14%, Californication 9%, Shallow 5%; Let Her Go yt-dlp failed.
+> Outputs are in the session scratchpad only; NOTHING was installed into `~/Tabs` (only Für Elise has a real chart).
+>
+> **Open decisions awaiting Daniel:** research folder public vs private. (He green-lit the plan below: "go ahead".)
+>
+> **Next actions (agreed 2026-11-08: Mac for 1–2, zulzi GPU only for 3):**
+> 1. **GuitarSet simulation bench (Mac):** download GuitarSet (CC BY 4.0, ~3 h acoustic guitar, solo + comping, per-note
+>    string/fret/onset from a hex pickup; mic audio ~1 GB) into a gitignored cache. Add a pitchbench (or Python) mode
+>    that replays each excerpt through a laptop-mic EQ + room noise (`hum=` model; better: a 10 s recording of Daniel's
+>    room, ask first) and scores hit / false accept / latency per note AND per chord. Then tune `NoteJudge.Config`
+>    automatically (grid / Bayesian) against it.
+> 2. **Basic Pitch comparison (Mac):** CoreML Basic Pitch (Apache-2.0; last session ran it with `scipy<1.13`, `setuptools<70`)
+>    as the detector: onset posteriors per semitone, judge = the expected notes' posteriors. Score on the same bench incl.
+>    streaming latency (sliding windows). Decide DSP vs model vs hybrid.
+> 3. Only if 2 is close but not enough: fine-tune / train a small model on GuitarSet + augmentation on zulzi GPU
+>    (`onnxruntime-gpu==1.22.0`), export to CoreML for the app. Daniel's play logs can later add his guitar/room.
+> 4. Later: better aligner features for band mixes (source separation, key/capo check), then v0.3.0 (2026-11-06 list).
+>
+> **Gotchas:**
+> - `make reload` only reopens MacTabs if it is running; Daniel asked to have it opened, so `open ~/Applications/MacTabs.app` is fine when he is testing.
+> - Every judge change: `pitchbench eval <wav> <chart> -q` on BOTH the real take (`research/.../bench/data/strip/9Ikb8QhVev0.wav`
+>   + `tab-ocr/elise_chart.json`) and the seeded synth (`pitchbench synth … 48000`), plus `hum=-35`; then `make test` (37/37).
+> - The bench's "premature/near" numbers are inflated by the Für Elise chart's own ±0.1–0.3 s timing errors.
+> - The pluck log's "heard" list is open-ended (all candidates) and misleads; hits are judged only on expected notes.
+> - Laptop mic rolls off below ~120 Hz: low E/A fundamentals are weak; the judge leans on harmonics 2+.
+> - zsh does not word-split `$args`: loop over single key=value strings in sweeps.
+> - `tools/align-chart.py` is a uv script (`#!/usr/bin/env -S uv run --script`); audio cache `~/Library/Caches/MacTabs/audio`.
+>
+> **Pointers:** `Sources/NoteJudge/NoteJudge.swift` (all thresholds in `Config`, each commented), `Sources/NoteJudge/Chart.swift`,
+> `Sources/MacTabs/{Game,Listener}.swift`, `Sources/pitchbench/main.swift`, `tools/align-chart.py`, README "Play mode",
+> `~/dan-hub/daniel-dev-skills/sessions/mactabs.md` (chat row added).
+
 > ## 🎮 PLAYABLE DEMO BUILT: WAIT MODE + PITCH JUDGE, READY FOR THE GUITAR (2026-11-07, evening) — READ THIS FIRST
 >
 > **Goal:** first playable demo of the guitar game: Für Elise in "wait mode", heard through the Mac mic.
